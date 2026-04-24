@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
 import base64
-from translate import Translator # புதிய மற்றும் பாதுகாப்பான மொழிபெயர்ப்பு
+from translate import Translator
 
 # 1. பக்க அமைப்பு
 st.set_page_config(page_title="TAMIL INVEST HUB", page_icon="🏦", layout="wide")
@@ -17,16 +17,15 @@ def get_base64_logo(bin_file):
         return base64.b64encode(data).decode()
     except: return None
 
-# 2. மொழிபெயர்ப்பு வசதி (Error-Free)
+# மொழிபெயர்ப்பு (Tamil fallback)
 def translate_to_tamil(text):
     try:
         translator = Translator(to_lang="ta")
-        # பெரிய டெக்ஸ்ட் என்றால் சுருக்கி மொழிபெயர்க்கும்
-        return translator.translate(text[:500]) 
+        return translator.translate(text[:500])
     except:
-        return text # பிழை வந்தால் ஆங்கிலத்திலேயே காட்டும்
+        return text
 
-# 3. லைவ் மார்க்கெட் டிக்கர்
+# 2. லைவ் டிக்கர்
 def get_ticker_text():
     indices = ["^NSEI", "^BSESN", "RELIANCE.NS", "SBIN.NS"]
     text = ""
@@ -40,7 +39,7 @@ def get_ticker_text():
         except: continue
     return text
 
-# 4. CSS (Elite Mobile UI)
+# 3. CSS வடிவமைப்பு
 st.markdown("""
     <style>
     html, body, [class*="css"] { font-size: 12px !important; background-color: #0d1117; color: #c9d1d9; }
@@ -55,32 +54,42 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 5. மேலடுக்கு டிக்கர்
+# மேலடுக்கு டிக்கர்
 st.markdown(f'<div class="ticker-wrap"><div class="ticker-move">{get_ticker_text()}</div></div>', unsafe_allow_html=True)
 
-# 6. மொழி & லோகோ
 with st.sidebar:
     sel_lang = st.radio("Language / மொழி", ["Tamil", "English"], horizontal=True)
+
 logo_b = get_base64_logo("logo.png")
 if logo_b:
     st.markdown(f'<div style="text-align:center;"><img src="data:image/png;base64,{logo_b}" style="width:55px; border-radius:10px;"></div>', unsafe_allow_html=True)
 st.markdown('<p class="header-text">TAMIL INVEST HUB</p>', unsafe_allow_html=True)
 
-# 7. TABS (சரியான வரிசை)
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Analysis", "📝 Overview", "📅 Actions", "🔮 Forecast", "🗞️ News", "🤝 Holders"])
+# 4. தரவு சேகரிப்பு (Data Fetching - NameError வராமல் இருக்க வெளியே வைக்கப்பட்டுள்ளது)
+u_input = st.text_input("பங்கின் பெயர் (eg: SBI, TCS)", value="COALINDIA").upper()
+ticker = f"{u_input}.NS" if ".NS" not in u_input else u_input
 
-with tab1:
-    u_input = st.text_input("Stock Name", value="COALINDIA").upper()
-    ticker = f"{u_input}.NS" if ".NS" not in u_input else u_input
-    
-    try:
-        stock = yf.Ticker(ticker)
-        info = stock.info
+# குளோபல் வேரியபிள்ஸ் (Global variables)
+stock_data_loaded = False
+info = {}
+stock = None
+
+try:
+    stock = yf.Ticker(ticker)
+    info = stock.info
+    if 'longName' in info:
+        stock_data_loaded = True
+except:
+    st.error("தரவுகளைப் பெற முடியவில்லை. சரியான குறியீட்டை உள்ளிடவும்.")
+
+# 5. TABS (நீங்கள் கேட்ட புதிய வரிசை)
+if stock_data_loaded:
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 Analysis", "📝 Overview", "🗞️ News", "🤝 Holders", "📅 Actions", "🔮 Forecast"])
+
+    with tab1:
+        st.markdown(f"### {info.get('longName', ticker)}")
         price = info.get('currentPrice', 0) or info.get('regularMarketPrice', 0)
         
-        st.markdown(f"### {info.get('longName', ticker)}")
-
-        # Compact Metrics
         st.markdown(f"""
             <div class="metric-row">
                 <div><span class="m-label">LTP</span><br><span class="m-value">₹{price:,.1f}</span></div>
@@ -92,79 +101,53 @@ with tab1:
             </div>
         """, unsafe_allow_html=True)
 
-        # Chart Period Buttons
-        pd = st.radio("Period", ["1d", "5d", "1mo", "1y"], horizontal=True, label_visibility="collapsed")
-        st_sel = st.radio("Style", ["Line", "Candle"], horizontal=True, label_visibility="collapsed")
+        pd_sel = st.radio("Period", ["1d", "5d", "1mo", "1y"], horizontal=True, label_visibility="collapsed")
+        hist = stock.history(period=pd_sel, interval="1m" if pd_sel=="1d" else "1d")
         
-        hist = stock.history(period=pd, interval="1m" if pd=="1d" else "1d")
-        if not hist.empty:
-            fig = go.Figure()
-            if st_sel == "Line":
-                fig.add_trace(go.Scatter(x=hist.index, y=hist['Close'], fill='tozeroy', line=dict(color='#ffd700', width=2)))
-            else:
-                fig.add_trace(go.Candlestick(x=hist.index, open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close']))
-            
-            fig.update_layout(height=250, margin=dict(l=0,r=0,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', xaxis_rangeslider_visible=False)
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+        fig = go.Figure(data=[go.Scatter(x=hist.index, y=hist['Close'], fill='tozeroy', line=dict(color='#ffd700', width=2))])
+        fig.update_layout(height=250, margin=dict(l=0,r=0,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', xaxis_rangeslider_visible=False)
+        st.plotly_chart(fig, use_container_width=True)
 
-    except: st.info("Loading Data...")
+    with tab2:
+        st.markdown("### 📝 Overview")
+        about_en = info.get('longBusinessSummary', 'No data.')
+        if sel_lang == "Tamil":
+            st.write(translate_to_tamil(about_en))
+        else:
+            st.write(about_en)
 
-with tab2:
-    # --- OVERVIEW TAB (புதியது) ---
-    st.markdown("### 📝 Overview (நிறுவனத் தகவல்)")
-    about_en = info.get('longBusinessSummary', 'No data.')
-    if sel_lang == "Tamil":
-        with st.spinner("மொழிபெயர்க்கிறேன்..."):
-            about_ta = translate_to_tamil(about_en)
-            st.write(about_ta)
-    else:
-        st.write(about_en)
-    
-    col_a, col_b = st.columns(2)
-    col_a.metric("Market Cap", f"₹{info.get('marketCap', 0)//10**7:,.0f} Cr")
-    col_b.metric("Sector", info.get('sector', 'N/A'))
+    with tab3:
+        st.markdown("### 🗞️ News Feed")
+        try:
+            for n in stock.news[:10]:
+                st.markdown(f"""
+                    <div class="news-box">
+                        <a href="{n['link']}" target="_blank" style="color:#ffd700; text-decoration:none; font-weight:bold;">{n['title']}</a><br>
+                        <small style="color:#8b949e;">{n['publisher']} • {datetime.fromtimestamp(n['providerPublishTime']).strftime('%d %b')}</small>
+                    </div>
+                """, unsafe_allow_html=True)
+        except: st.write("செய்திகள் இல்லை.")
 
-with tab3:
-    st.markdown("### 📅 Actions (நிகழ்வுகள்)")
-    acts = stock.actions.tail(10).sort_index(ascending=False)
-    for date, row in acts.iterrows():
-        if row['Dividends'] > 0: st.info(f"📅 {date.strftime('%d %b %Y')} - Dividend: ₹{row['Dividends']}")
-        if row['Stock Splits'] > 0: st.success(f"📅 {date.strftime('%d %b %Y')} - Bonus/Split: {row['Stock Splits']}")
+    with tab4:
+        st.markdown("### 🤝 Shareholding Pattern")
+        p = info.get('heldPercentInsiders', 0.5) * 100
+        inst = info.get('heldPercentInstitutions', 0.3) * 100
+        fig_pie = go.Figure(data=[go.Pie(labels=['Promoters', 'Institutions', 'Others'], values=[p, inst, 100-(p+inst)], hole=.5, marker=dict(colors=['#ffd700', '#58a6ff', '#2ea043']))])
+        fig_pie.update_layout(height=300, margin=dict(l=0,r=0,t=20,b=0), legend=dict(orientation="h", y=-0.1))
+        st.plotly_chart(fig_pie, use_container_width=True)
 
-with tab4:
-    # --- FORECAST TAB (புதியது) ---
-    st.markdown("### 🔮 Smart Forecast (எதிர்கால கணிப்பு)")
-    roe = info.get('returnOnEquity', 0)
-    debt = info.get('debtToEquity', 150)
-    
-    if roe > 0.15 and debt < 100:
-        st.success("Verdict: Strong Buy 🚀 (நல்ல எதிர்காலம் உள்ளது)")
-    elif roe > 0.10:
-        st.warning("Verdict: Hold/Watch ⚖️ (கவனிக்கவும்)")
-    else:
-        st.error("Verdict: Bearish 📉 (தவிர்ப்பது நல்லது)")
-    
-    st.caption("இந்தக் கணிப்பு நிறுவனத்தின் லாபம் மற்றும் கடனை அடிப்படையாகக் கொண்டது.")
+    with tab5:
+        st.markdown("### 📅 Corporate Actions")
+        acts = stock.actions.tail(10).sort_index(ascending=False)
+        for date, row in acts.iterrows():
+            if row['Dividends'] > 0: st.info(f"📅 {date.strftime('%d %b %Y')} - Dividend: ₹{row['Dividends']}")
+            if row['Stock Splits'] > 0: st.success(f"📅 {date.strftime('%d %b %Y')} - Bonus/Split: {row['Stock Splits']}")
 
-with tab5:
-    # --- NEWS FEED TAB (புதியது) ---
-    st.markdown("### 🗞️ News Feed (சமீபத்திய செய்திகள்)")
-    try:
-        for n in stock.news[:10]:
-            st.markdown(f"""
-                <div class="news-box">
-                    <a href="{n['link']}" target="_blank" style="color:#ffd700; text-decoration:none; font-weight:bold;">{n['title']}</a><br>
-                    <small style="color:#8b949e;">{n['publisher']} • {datetime.fromtimestamp(n['providerPublishTime']).strftime('%d %b')}</small>
-                </div>
-            """, unsafe_allow_html=True)
-    except: st.write("News not available.")
-
-with tab6:
-    st.markdown("### 🤝 Holders (பங்குதாரர்கள்)")
-    p = info.get('heldPercentInsiders', 0.5) * 100
-    inst = info.get('heldPercentInstitutions', 0.3) * 100
-    fig_pie = go.Figure(data=[go.Pie(labels=['Promoters', 'Institutions', 'Others'], values=[p, inst, 100-(p+inst)], hole=.5, marker=dict(colors=['#ffd700', '#58a6ff', '#2ea043']))])
-    fig_pie.update_layout(height=300, margin=dict(l=0,r=0,t=20,b=0), legend=dict(orientation="h", y=-0.1))
-    st.plotly_chart(fig_pie, use_container_width=True)
+    with tab6:
+        st.markdown("### 🔮 Forecast")
+        roe = info.get('returnOnEquity', 0)
+        if roe > 0.15: st.success("Strong Fundamental Strength 🚀")
+        else: st.warning("Neutral Growth ⚖️")
+        st.write(f"ROE: {roe*100:.2f}%")
 
 st.markdown("<div style='text-align:center;color:#333;font-size:10px;margin-top:20px;'>© 2026 TAMIL INVEST HUB</div>", unsafe_allow_html=True)
