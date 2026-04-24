@@ -36,21 +36,21 @@ def stock_analyzer(info):
     pe = info.get('trailingPE', 100)
     if pe < 25: 
         score += 3
-        reasons.append("✅ பங்கு விலை குறைவாக (Cheap) உள்ளது")
+        reasons.append("✅ விலை மலிவு")
     debt = info.get('debtToEquity', 200)
     if debt < 100: 
         score += 3
-        reasons.append("✅ நிறுவனத்திற்கு கடன் சுமை குறைவு")
+        reasons.append("✅ கடன் குறைவு")
     margin = info.get('profitMargins', 0)
     if margin > 0.1: 
         score += 4
-        reasons.append("✅ நிறுவனம் நல்ல லாபம் ஈட்டுகிறது")
+        reasons.append("✅ நல்ல லாபம்")
     
-    if score >= 7: return "Strong Bullish 🚀 (சிறப்பானது)", "#2ea043", reasons
-    elif score >= 4: return "Neutral ⚖️ (கவனிக்கவும்)", "#ffd700", reasons
-    else: return "Bearish 📉 (தவிர்க்கவும்)", "#f85149", reasons
+    if score >= 7: return "Strong Bullish 🚀", "#2ea043", reasons
+    elif score >= 4: return "Neutral ⚖️", "#ffd700", reasons
+    else: return "Bearish 📉", "#f85149", reasons
 
-# 4. CSS (Elite Design)
+# 4. CSS (Elite Mobile Design)
 st.markdown("""
     <style>
     html, body, [class*="css"] { font-size: 12px !important; background-color: #0d1117; color: #c9d1d9; }
@@ -58,8 +58,7 @@ st.markdown("""
     .ticker-move { display: inline-block; white-space: nowrap; animation: ticker 30s linear infinite; font-weight: bold; }
     @keyframes ticker { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
     .header-text { background: linear-gradient(90deg, #ffd700, #b8860b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 22px !important; font-weight: 800; text-align: center; }
-    .analyzer-box { background: #1c2128; border-radius: 10px; padding: 15px; border: 2px solid #30363d; margin-top: 10px; }
-    .metric-row { background: #161b22; border-radius: 8px; padding: 8px 12px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
+    .metric-row { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 8px 12px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
     .m-label { color: #8b949e; font-size: 11px; }
     .m-value { color: #ffd700; font-size: 14px; font-weight: bold; }
     </style>
@@ -71,10 +70,10 @@ st.markdown(f'<div class="ticker-wrap"><div class="ticker-move">{t_html} {t_html
 
 # 6. மொழித் தேர்வு
 with st.sidebar:
-    sel_lang = st.radio("Language / மொழி", ["Tamil", "English"], horizontal=True)
+    sel_lang = st.radio("Language", ["Tamil", "English"], horizontal=True)
     L = {
-        "Tamil": {"search": "பங்கின் பெயர்", "about": "நிறுவனத்தைப் பற்றி", "holders": "பங்குதாரர் விவரம்", "actions": "நிறுவன நிகழ்வுகள்", "broker": "புரோக்கர் இணைப்பு"},
-        "English": {"search": "Search Stock", "about": "About Company", "holders": "Shareholding Pattern", "actions": "Corporate Actions", "broker": "Broker Connect"}
+        "Tamil": {"search": "பங்கின் பெயர்", "holders": "பங்குதாரர் விவரம்", "actions": "நிறுவன நிகழ்வுகள்", "about": "நிறுவனத்தைப் பற்றி"},
+        "English": {"search": "Search Stock", "holders": "Shareholding", "actions": "Corporate Actions", "about": "About Stock"}
     }[sel_lang]
 
 # 7. லோகோ & தலைப்பு
@@ -83,8 +82,8 @@ if logo_b:
     st.markdown(f'<div style="text-align:center;"><img src="data:image/png;base64,{logo_b}" style="width:55px; border-radius:10px;"></div>', unsafe_allow_html=True)
 st.markdown('<p class="header-text">TAMIL INVEST HUB</p>', unsafe_allow_html=True)
 
-# 8. TABS (வரிசை மாற்றப்பட்டுள்ளது)
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Analysis", "📅 Actions", "🤝 Shareholding", "💼 Broker"])
+# 8. TABS
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Analysis", "📅 Actions", "🤝 Holders", "💼 Broker"])
 
 with tab1:
     u_input = st.text_input(L["search"], value="COALINDIA").upper()
@@ -95,37 +94,58 @@ with tab1:
         info = stock.info
         price = info.get('currentPrice', 0) or info.get('regularMarketPrice', 0)
         
-        st.markdown(f"### {info.get('longName', ticker)}")
+        st.markdown(f"**{info.get('longName', ticker)}**")
 
-        # --- SMART ANALYZER ---
+        # --- Verdict ---
         verdict, v_color, reasons = stock_analyzer(info)
-        st.markdown(f"""
-            <div class="analyzer-box" style="border-color: {v_color};">
-                <div style="font-size: 18px; font-weight: 800; text-align: center; color: {v_color};">{verdict}</div>
-                <p style="font-size:11px; margin-top:5px; text-align:center;">{" | ".join(reasons)}</p>
-            </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f'<div style="background:#1c2128; padding:10px; border-radius:10px; border:1px solid {v_color}; text-align:center; color:{v_color}; font-weight:bold; font-size:16px;">{verdict}</div>', unsafe_allow_html=True)
 
-        # --- COMPACT METRICS ---
+        # --- Compact Metrics ---
         st.markdown(f"""
             <div class="metric-row">
                 <div><span class="m-label">LTP</span><br><span class="m-value">₹{price:,.1f}</span></div>
+                <div style="text-align:right;"><span class="m-label">52W High</span><br><span class="m-value">₹{info.get('fiftyTwoWeekHigh', 0):,.1f}</span></div>
+            </div>
+            <div class="metric-row">
+                <div><span class="m-label">52W Low</span><br><span class="m-value">₹{info.get('fiftyTwoWeekLow', 0):,.1f}</span></div>
                 <div style="text-align:right;"><span class="m-label">P/E Ratio</span><br><span class="m-value">{info.get('trailingPE', 'N/A')}</span></div>
             </div>
         """, unsafe_allow_html=True)
 
-        # Chart
-        pd_sel = st.radio("Period", ["1d", "5d", "1mo", "1y"], horizontal=True, label_visibility="collapsed")
-        hist = stock.history(period=pd_sel)
-        fig = go.Figure(data=[go.Scatter(x=hist.index, y=hist['Close'], fill='tozeroy', line=dict(color='#ffd700', width=2))])
-        fig.update_layout(height=230, margin=dict(l=0,r=0,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', xaxis_rangeslider_visible=False)
-        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-        
-        # --- ABOUT COMPANY (Analysis Tab-லேயே நிறுவனத்தின் சுருக்கம்) ---
-        st.markdown(f"#### {L['about']}")
-        st.write(info.get('longBusinessSummary', 'தகவல் இல்லை.'))
+        # --- CHART FIX (Line & Candle) ---
+        p_col, s_col = st.columns(2)
+        pd_sel = p_col.radio("Period", ["1d", "5d", "1mo", "1y"], horizontal=True)
+        st_sel = s_col.radio("Style", ["Line", "Candle"], horizontal=True)
 
-    except: st.info("Searching Stock Data...")
+        # கேண்டில் தெளிவாக தெரிய Interval செட்டிங்ஸ்
+        interval = "1m" if pd_sel == "1d" else "15m" if pd_sel == "5d" else "1d"
+        hist = stock.history(period=pd_sel, interval=interval)
+
+        if not hist.empty:
+            fig = go.Figure()
+            if st_sel == "Line":
+                color = '#2ea043' if price >= hist['Open'].iloc[0] else '#f85149'
+                fig.add_trace(go.Scatter(x=hist.index, y=hist['Close'], fill='tozeroy', line=dict(color=color, width=2)))
+            else:
+                # Candlestick chart
+                fig.add_trace(go.Candlestick(
+                    x=hist.index,
+                    open=hist['Open'], high=hist['High'],
+                    low=hist['Low'], close=hist['Close'],
+                    increasing_line_color='#2ea043', decreasing_line_color='#f85149'
+                ))
+            
+            fig.update_layout(
+                height=280, margin=dict(l=0,r=0,t=0,b=0), 
+                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                xaxis_rangeslider_visible=False, xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor='#1e2329')
+            )
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+
+        st.markdown(f"#### {L['about']}")
+        st.write(info.get('longBusinessSummary', 'N/A'))
+
+    except: st.info("Loading Stock Data...")
 
 with tab2:
     st.markdown(f"### {L['actions']}")
@@ -135,34 +155,19 @@ with tab2:
             d_str = date.strftime('%d %b %Y')
             if row['Dividends'] > 0: st.info(f"📅 {d_str} - Dividend: ₹{row['Dividends']}")
             if row['Stock Splits'] > 0: st.success(f"📅 {d_str} - Bonus/Split: {row['Stock Splits']}")
-    except: st.write("No recent actions.")
+    except: st.write("Data not available.")
 
 with tab3:
-    # --- SHAREHOLDING PATTERN TAB (புதிய வசதி) ---
     st.markdown(f"### {L['holders']}")
     try:
-        # டேட்டா பெறுதல்
-        promoter = info.get('heldPercentInsiders', 0.5) * 100
-        inst_total = info.get('heldPercentInstitutions', 0.3) * 100
-        # FII/DII தோராயமான பிரிப்பு (API-ல் சில சமயம் ஒன்றாக வரும்)
-        fii = inst_total * 0.6
-        dii = inst_total * 0.4
-        others = 100 - (promoter + inst_total)
-        
-        labels = ['Promoters', 'FII', 'DII', 'Others']
-        values = [promoter, fii, dii, others]
-        colors = ['#ffd700', '#58a6ff', '#ff7b72', '#2ea043']
-
-        fig_pie = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.5, marker=dict(colors=colors))])
-        fig_pie.update_layout(height=350, margin=dict(l=0,r=0,t=20,b=0), legend=dict(orientation="h", y=-0.1, xanchor="center", x=0.5))
+        p = info.get('heldPercentInsiders', 0.5) * 100
+        inst = info.get('heldPercentInstitutions', 0.3) * 100
+        fig_pie = go.Figure(data=[go.Pie(labels=['Promoters', 'Institutions', 'Others'], values=[p, inst, 100-(p+inst)], hole=.5, marker=dict(colors=['#ffd700', '#58a6ff', '#2ea043']))])
+        fig_pie.update_layout(height=300, margin=dict(l=0,r=0,t=20,b=0), legend=dict(orientation="h", y=-0.1))
         st.plotly_chart(fig_pie, use_container_width=True)
-        
-        st.write("குறிப்பு: இது நிறுவனத்தின் அதிகாரப்பூர்வ சமீபத்திய பங்குதாரர் விவரம்.")
-    except:
-        st.write("பங்குதாரர் விவரம் தற்போது கிடைக்கவில்லை.")
+    except: st.write("No data found.")
 
 with tab4:
-    st.markdown(f"### {L['broker']}")
     st.button("Connect Zerodha")
     st.button("Connect Angel One")
 
