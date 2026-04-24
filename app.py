@@ -11,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 2. பிரீமியம் லுக் தரும் டிசைன் (Custom CSS)
+# 2. # 2. பிரீமியம் லுக் தரும் டிசைன் (Custom CSS)
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
