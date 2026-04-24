@@ -3,8 +3,9 @@ import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
-import time
+from googletrans import Translator # மொழிபெயர்ப்பிற்காக
 import base64
+import time
 
 # 1. பக்க அமைப்பு
 st.set_page_config(page_title="TS INVEST PRO", page_icon="📈", layout="wide")
@@ -17,7 +18,9 @@ def get_base64(bin_file):
         return base64.b64encode(data).decode()
     except: return None
 
-# 2. இருமொழி வசதிக்கான தரவுகள் (Language Dictionary)
+translator = Translator()
+
+# 2. இருமொழி தரவுகள்
 lang_dict = {
     "English": {
         "title": "TS INVEST PRO",
@@ -25,88 +28,73 @@ lang_dict = {
         "broker": "💼 Broker Connect",
         "feed": "🗞️ Market Feed",
         "search_label": "Enter Ticker (e.g. SBIN.NS)",
-        "ltp": "LTP",
-        "pe": "P/E",
-        "pb": "P/B",
-        "peg": "PEG",
+        "ltp": "LTP", "pe": "P/E", "pb": "P/B", "peg": "PEG",
         "chart_title": "Price Chart",
+        "shareholding_title": "Shareholding Pattern",
         "about": "About Company",
-        "connect_title": "Connect Your Broker",
-        "portfolio": "LIVE PORTFOLIO SUMMARY",
         "news_title": "Live News Feed",
-        "lang_select": "Choose Language"
+        "loading_news": "Fetching news...",
+        "no_news": "No news found for this stock.",
+        "translate_btn": "Translate to Tamil"
     },
     "Tamil": {
         "title": "TS இன்வெஸ்ட் PRO",
         "analysis": "🔍 ஆய்வு",
         "broker": "💼 புரோக்கர் இணைப்பு",
         "feed": "🗞️ சந்தை செய்திகள்",
-        "search_label": "பங்கின் பெயரை உள்ளிடவும் (எ.கா. SBIN.NS)",
-        "ltp": "தற்போதைய விலை",
-        "pe": "P/E விகிதம்",
-        "pb": "P/B விகிதம்",
-        "peg": "PEG விகிதம்",
+        "search_label": "பங்கின் குறியீட்டை உள்ளிடவும் (eg: RELIANCE.NS)",
+        "ltp": "விலை", "pe": "P/E", "pb": "P/B", "peg": "PEG",
         "chart_title": "விலை வரைபடம்",
+        "shareholding_title": "பங்குதாரர் விவரம்",
         "about": "நிறுவனத்தைப் பற்றி",
-        "connect_title": "உங்கள் புரோக்கரை இணைக்கவும்",
-        "portfolio": "நேரடி போர்ட்ஃபோலியோ விவரம்",
         "news_title": "நேரலைச் செய்திகள்",
-        "lang_select": "மொழியைத் தேர்ந்தெடுக்கவும்"
+        "loading_news": "செய்திகளைத் திரட்டுகிறேன்...",
+        "no_news": "செய்திகள் எதுவும் கிடைக்கவில்லை.",
+        "translate_btn": "தமிழில் மொழிபெயர்க்க"
     }
 }
 
-# 3. பிரீமியம் மொபைல் CSS
+# 3. மொபைல் CSS (Small Fonts)
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-    html, body, [class*="css"] { 
-        font-family: 'Inter', sans-serif; background-color: #0d1117; color: #c9d1d9;
-        font-size: 12px !important; line-height: 1.3;
-    }
-    .header-text {
-        background: linear-gradient(90deg, #ffd700, #b8860b);
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        font-size: 22px !important; font-weight: 800; text-align: center;
-    }
+    html, body, [class*="css"] { font-size: 12px !important; background-color: #0d1117; color: #c9d1d9; }
+    .header-text { background: linear-gradient(90deg, #ffd700, #b8860b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 20px !important; font-weight: 800; text-align: center; }
     [data-testid="stMetric"] { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 5px !important; }
     .news-card { background: #161b22; border-radius: 8px; padding: 10px; margin-bottom: 8px; border-left: 3px solid #ffd700; }
-    .stButton>button { width: 100%; border-radius: 6px; height: 32px; font-size: 11px; }
+    .stTabs [data-baseweb="tab"] { font-size: 11px !important; padding: 8px !important; }
     </style>
     """, unsafe_allow_html=True)
 
-# 4. மொழித் தேர்வு (Sidebar or Top)
+# 4. மொழித் தேர்வு
 with st.sidebar:
     logo_img = get_base64("logo.png")
     if logo_img:
-        st.markdown(f'<img src="data:image/png;base64,{logo_img}" style="width:80px; border-radius:10px; margin-bottom:10px;">', unsafe_allow_html=True)
+        st.markdown(f'<img src="data:image/png;base64,{logo_img}" style="width:70px; border-radius:10px;">', unsafe_allow_html=True)
     sel_lang = st.radio("Language / மொழி", ["English", "Tamil"], horizontal=True)
     L = lang_dict[sel_lang]
 
 # 5. SPLASH SCREEN
 if 'startup' not in st.session_state:
-    placeholder = st.empty()
-    with placeholder.container():
-        st.markdown(f"<div style='height:80vh; display:flex; flex-direction:column; align-items:center; justify-content:center;'><h1 style='color:#ffd700;'>TS INVEST</h1><p>Starting...</p></div>", unsafe_allow_html=True)
-        time.sleep(2)
+    p = st.empty()
+    p.markdown("<div style='height:80vh; display:flex; align-items:center; justify-content:center;'><h1 style='color:#ffd700;'>TS INVEST</h1></div>", unsafe_allow_html=True)
+    time.sleep(1.5)
     st.session_state.startup = True
-    placeholder.empty()
+    p.empty()
 
-# 6. HEADER
 st.markdown(f'<p class="header-text">{L["title"]}</p>', unsafe_allow_html=True)
 
-# 7. TABS
+# 6. TABS
 tab1, tab2, tab3 = st.tabs([L["analysis"], L["broker"], L["feed"]])
 
 with tab1:
-    search_ticker = st.text_input(L["search_label"], value="SBIN.NS").upper()
-    
+    ticker = st.text_input(L["search_label"], value="RELIANCE.NS").upper()
     try:
-        stock = yf.Ticker(search_ticker)
+        stock = yf.Ticker(ticker)
         info = stock.info
         
-        # மெட்ரிக்ஸ்
+        # Metrics
         price = info.get('currentPrice') or info.get('regularMarketPrice', 0)
-        st.markdown(f"**{info.get('longName', search_ticker)}**")
+        st.markdown(f"**{info.get('longName', ticker)}**")
         
         m1, m2, m3, m4 = st.columns(4)
         m1.metric(L["ltp"], f"₹{price:,.1f}")
@@ -114,68 +102,60 @@ with tab1:
         m3.metric(L["pb"], f"{info.get('priceToBook', 'N/A')}")
         m4.metric(L["peg"], f"{info.get('pegRatio', 'N/A')}")
 
-        st.divider()
-
-        # வரைபடம் (Chart with Period Selector)
-        st.markdown(f"**{L['chart_title']}**")
-        period_col, _ = st.columns([2, 1])
-        with period_col:
-            period = st.radio("", ["1mo", "3mo", "6mo", "1y"], horizontal=True, label_visibility="collapsed")
-        
-        # தரவுகளைப் பெற்று வரைபடம் வரைதல்
+        # --- Chart with Period ---
+        period = st.select_slider("", options=["1mo", "3mo", "6mo", "1y"], value="1y")
         hist = stock.history(period=period)
-        if not hist.empty:
-            fig = go.Figure()
-            # Area Chart ஸ்டைல்
-            fig.add_trace(go.Scatter(
-                x=hist.index, y=hist['Close'],
-                fill='tozeroy', line=dict(color='#ffd700', width=2),
-                name="Price"
-            ))
-            fig.update_layout(
-                height=280, margin=dict(l=0, r=0, t=10, b=0),
-                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                xaxis=dict(showgrid=False, color="#8b949e"),
-                yaxis=dict(showgrid=True, gridcolor='#1e2329', side="right", color="#8b949e")
-            )
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-        else:
-            st.warning("No chart data available.")
+        fig = go.Figure(data=[go.Scatter(x=hist.index, y=hist['Close'], fill='tozeroy', line=dict(color='#ffd700', width=1.5))])
+        fig.update_layout(height=250, margin=dict(l=0, r=0, t=10, b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig, use_container_width=True)
 
-        with st.expander(L["about"]):
-            st.write(info.get('longBusinessSummary', 'N/A'))
+        # --- NEW: Shareholding Donut Chart ---
+        st.markdown(f"**{L['shareholding_title']}**")
+        holders = stock.major_holders
+        if holders is not None:
+            # பொதுவாக yfinance தரும் தரவுகளைப் பிரித்தல்
+            labels = ['Institutions', 'Promoters', 'Public/Others']
+            values = [info.get('heldPercentInstitutions', 0.2)*100, 
+                      info.get('heldPercentInsiders', 0.5)*100, 
+                      30.0] # மாதிரி மதிப்பு
             
-    except Exception as e:
-        st.info("Searching Stock...")
+            fig_pie = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.5, marker=dict(colors=['#58a6ff', '#ffd700', '#2ea043']))])
+            fig_pie.update_layout(height=200, margin=dict(l=0, r=0, t=0, b=0), showlegend=True, legend=dict(font=dict(size=10), orientation="h"))
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+        # --- About Company with Translation ---
+        with st.expander(L["about"]):
+            summary = info.get('longBusinessSummary', 'N/A')
+            if sel_lang == "Tamil":
+                if st.button(L["translate_btn"]):
+                    with st.spinner("Translating..."):
+                        summary = translator.translate(summary, dest='ta').text
+            st.write(summary)
+
+    except: st.info("Loading Stock Data...")
 
 with tab2:
     st.markdown(f"### {L['connect_title']}")
-    b1, b2 = st.columns(2)
-    with b1:
-        st.markdown('<div style="background:#1c2128; padding:10px; border-radius:10px; text-align:center;">Zerodha<br><span style="color:#2ea043; font-size:10px;">● Ready</span></div>', unsafe_allow_html=True)
-        st.button("Link Kite", key="kite")
-    with b2:
-        st.markdown('<div style="background:#1c2128; padding:10px; border-radius:10px; text-align:center;">Angel One<br><span style="color:#2ea043; font-size:10px;">● Ready</span></div>', unsafe_allow_html=True)
-        st.button("Link Angel", key="angel")
-
-    st.divider()
-    st.markdown(f"**{L['portfolio']}**")
-    p_col1, p_col2 = st.columns(2)
-    p_col1.metric("Investment", "₹4.5L")
-    p_col2.metric("Current", "₹5.1L", "+₹62K")
+    # Broker Connect UI...
+    st.button("Connect Zerodha")
+    st.button("Connect Angel One")
 
 with tab3:
     st.markdown(f"### {L['news_title']}")
-    try:
-        news = yf.Ticker(search_ticker).news[:6]
-        for n in news:
-            st.markdown(f"""
-                <div class="news-card">
-                    <a href="{n['link']}" target="_blank" style="color:#ffd700; text-decoration:none; font-weight:600;">{n['title']}</a><br>
-                    <span style="color:#666; font-size:10px;">{n['publisher']} • {datetime.fromtimestamp(n['providerPublishTime']).strftime('%d %b')}</span>
-                </div>
-            """, unsafe_allow_html=True)
-    except:
-        st.write("News not available.")
+    with st.spinner(L["loading_news"]):
+        try:
+            news_items = stock.news
+            if news_items:
+                for n in news_items[:8]:
+                    st.markdown(f"""
+                        <div class="news-card">
+                            <a href="{n['link']}" target="_blank" style="color:#ffd700; text-decoration:none; font-weight:600;">{n['title']}</a><br>
+                            <span style="color:#666; font-size:10px;">{n['publisher']} • {datetime.fromtimestamp(n['providerPublishTime']).strftime('%d %b')}</span>
+                        </div>
+                    """, unsafe_allow_html=True)
+            else:
+                st.warning(L["no_news"])
+        except:
+            st.error("Could not fetch news.")
 
 st.markdown('<div style="text-align:center; color:#333; font-size:10px; margin-top:20px;">© 2026 TS INVEST</div>', unsafe_allow_html=True)
