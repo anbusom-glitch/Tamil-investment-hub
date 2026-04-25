@@ -5,16 +5,16 @@ import plotly.graph_objects as go
 from deep_translator import GoogleTranslator
 from datetime import datetime
 
-# 1. பக்க அமைப்பு
+# 1. பக்க அமைப்பு மற்றும் செஷன்
 st.set_page_config(page_title="TAMIL INVEST HUB PRO", page_icon="📈", layout="wide")
 
 if 'watchlist' not in st.session_state: st.session_state['watchlist'] = []
 if 'language' not in st.session_state: st.session_state['language'] = "Tamil"
 
-# மொழிபெயர்ப்பு உதவியாளர்
+# மொழிபெயர்ப்பு உதவியாளர் (பிழைகளைத் தவிர்க்க try-except)
 @st.cache_data(show_spinner=False)
 def translate_text(text, target_lang):
-    if target_lang == "English" or not text: return text
+    if not text or target_lang == "English": return text
     try:
         return GoogleTranslator(source='auto', target='ta').translate(text)
     except: return text
@@ -33,7 +33,7 @@ st.markdown("""
         -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
     .sub-title { font-size: 10px !important; color: #8b949e; letter-spacing: 2px; margin-top: 2px; opacity: 0.7; }
-    .metric-box { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; }
+    .metric-box { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
     .m-label { color: #8b949e; font-size: 11px; font-weight: 700; text-transform: uppercase; }
     .m-value { color: #ffffff; font-size: 16px; font-weight: 800; }
     .news-card { background: #1c2128; border-radius: 10px; padding: 15px; margin-bottom: 10px; border-left: 4px solid #39FF14; }
@@ -53,92 +53,103 @@ st.markdown(f"""
     </div>
     """, unsafe_allow_html=True)
 
-# 4. சர்ச் (தானாக .NS சேர்க்கும் வசதியுடன்)
-u_input = st.text_input("Search Symbol", value="RELIANCE").upper().strip()
-ticker = f"{u_input}.NS" if ".NS" not in u_input and ".BO" not in u_input and "^" not in u_input else u_input
+# 4. சர்ச் - ஸ்மார்ட் டிக்கர் லாஜிக்
+u_input = st.text_input("Search Symbol (eg: RELIANCE)", value="RELIANCE").upper().strip()
+if u_input:
+    # தானாக .NS அல்லது .BO உள்ளதா எனச் சரிபார்த்து இணைத்தல்
+    if not any(suffix in u_input for suffix in [".NS", ".BO", "^"]):
+        ticker = f"{u_input}.NS"
+    else:
+        ticker = u_input
 
-# 5. டேப்கள்
-tabs = st.tabs([
-    f"📊 {get_text('Analysis', 'பகுப்பாய்வு')}", 
-    f"🗞️ {get_text('News', 'செய்திகள்')}",
-    f"🤝 {get_text('Shareholding', 'பங்குதாரர்')}", 
-    f"⭐ {get_text('Rating', 'ரேட்டிங்')}", 
-    f"📅 {get_text('Actions', 'நிகழ்வுகள்')}",
-    f"📌 {get_text('Watchlist', 'வாட்ச்லிஸ்ட்')}"
-])
+    # 5. டேப்கள்
+    tabs = st.tabs([
+        f"📊 {get_text('Analysis', 'பகுப்பாய்வு')}", 
+        f"🗞️ {get_text('News', 'செய்திகள்')}",
+        f"🤝 {get_text('Shareholding', 'பங்குதாரர்')}", 
+        f"⭐ {get_text('Rating', 'ரேட்டிங்')}", 
+        f"📅 {get_text('Actions', 'நிகழ்வுகள்')}",
+        f"📌 {get_text('Watchlist', 'வாட்ச்லிஸ்ட்')}"
+    ])
 
-# 6. தரவுகளைப் பெறுதல்
-try:
-    stock_obj = yf.Ticker(ticker)
-    info = stock_obj.info
-    
-    # தரவு உள்ளதா என உறுதி செய்தல்
-    if info and 'symbol' in info:
+    # 6. தரவுகளைப் பெறுதல்
+    try:
+        stock_obj = yf.Ticker(ticker)
+        # .info எடுக்கும் போது பிழை வந்தால் கையாள .fast_info அல்லது .history முதலில் சோதிக்கலாம்
         hist = stock_obj.history(period="1y")
         
-        # --- பகுப்பாய்வு (Analysis) ---
-        with tabs[0]:
-            st.subheader(info.get('longName', u_input))
-            m_data = [
-                (get_text("Sector", "துறை"), info.get('sector', 'N/A')),
-                (get_text("LTP", "விலை"), f"₹{info.get('currentPrice', 0):,.2f}"),
-                (get_text("52W High", "52 வார உச்சம்"), f"₹{info.get('fiftyTwoWeekHigh', 0):,.2f}"),
-                (get_text("P/B Ratio", "பி.பி விகிதம்"), f"{info.get('priceToBook', 'N/A')}")
-            ]
-            for lbl, val in m_data:
-                st.markdown(f'<div class="metric-box"><span class="m-label">{lbl}</span><span class="m-value">{val}</span></div>', unsafe_allow_html=True)
-            
-            st.plotly_chart(go.Figure(data=[go.Candlestick(x=hist.index[-60:], open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'])]).update_layout(height=400, template="plotly_dark", xaxis_rangeslider_visible=False), use_container_width=True)
-            
-            # Expander பகுதி
-            with st.expander(get_text("About Company ⬇️", "நிறுவனத்தைப் பற்றி ⬇️")):
-                raw_summary = info.get('longBusinessSummary', 'No data.')
-                st.write(translate_text(raw_summary, st.session_state['language']))
+        if not hist.empty:
+            info = stock_obj.info
+            ltp = info.get('currentPrice') or info.get('regularMarketPrice') or hist['Close'].iloc[-1]
 
-        # --- செய்திகள் (News) ---
-        with tabs[1]:
-            st.markdown(f"### {get_text('Latest News', 'சமீபத்திய செய்திகள்')}")
-            news_list = stock_obj.news
-            if news_list:
-                for news in news_list[:5]:
-                    st.markdown(f"""
-                        <div class="news-card">
-                            <a href="{news['link']}" target="_blank" style="color:#39FF14; font-weight:bold; text-decoration:none;">{news['title']}</a><br>
-                            <small style="color:#8b949e;">{news['publisher']}</small>
-                        </div>
-                    """, unsafe_allow_html=True)
-            else: st.info("No news found.")
+            # --- பகுப்பாய்வு (Analysis) ---
+            with tabs[0]:
+                st.subheader(info.get('longName', u_input))
+                m_data = [
+                    (get_text("Sector", "துறை"), info.get('sector', 'N/A')),
+                    (get_text("LTP", "விலை"), f"₹{ltp:,.2f}"),
+                    (get_text("52W High", "52 வார உச்சம்"), f"₹{info.get('fiftyTwoWeekHigh', 0):,.2f}"),
+                    (get_text("P/B Ratio", "பி.பி விகிதம்"), f"{info.get('priceToBook', 'N/A')}")
+                ]
+                for lbl, val in m_data:
+                    st.markdown(f'<div class="metric-box"><span class="m-label">{lbl}</span><span class="m-value">{val}</span></div>', unsafe_allow_html=True)
+                
+                fig = go.Figure(data=[go.Candlestick(x=hist.index[-60:], open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'])])
+                fig.update_layout(height=400, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=0,r=0,t=0,b=0))
+                st.plotly_chart(fig, use_container_width=True)
+                
+                with st.expander(get_text("About Company ⬇️", "நிறுவனத்தைப் பற்றி ⬇️")):
+                    raw_summary = info.get('longBusinessSummary', 'No data.')
+                    translated_summary = translate_text(raw_summary, st.session_state['language'])
+                    st.markdown(f'<div style="line-height:1.8;">{translated_summary}</div>', unsafe_allow_html=True)
 
-        # --- மற்றவை (பங்குதாரர், ரேட்டிங்...) ---
-        with tabs[2]:
-            promo = (info.get('heldPercentInsiders') or 0) * 100
-            inst = (info.get('heldPercentInstitutions') or 0) * 100
-            fig_pie = go.Figure(data=[go.Pie(labels=['Promoters', 'Institutions', 'Public'], values=[promo, inst, 100-(promo+inst)], hole=0.5)])
-            st.plotly_chart(fig_pie.update_layout(height=400, template="plotly_dark"), use_container_width=True)
+            # --- செய்திகள் (News) ---
+            with tabs[1]:
+                st.markdown(f"### {get_text('Latest News', 'சமீபத்திய செய்திகள்')}")
+                news_list = stock_obj.news
+                if news_list:
+                    for news in news_list[:5]:
+                        st.markdown(f"""
+                            <div class="news-card">
+                                <a href="{news['link']}" target="_blank" style="color:#39FF14; font-weight:bold; text-decoration:none;">{news['title']}</a><br>
+                                <small style="color:#8b949e;">{news['publisher']}</small>
+                            </div>
+                        """, unsafe_allow_html=True)
+                else: st.info("No news found.")
 
-        with tabs[3]:
-            score = 85 if (info.get('trailingPE', 100) < 30) else 45
-            color = "#39FF14" if score > 70 else "#FF3131"
-            st.markdown(f'<div style="text-align:center; padding:20px; border:2px solid {color}; border-radius:10px;"><h1>{score}/100</h1></div>', unsafe_allow_html=True)
+            # --- பங்குதாரர் (Shareholding) ---
+            with tabs[2]:
+                promo = (info.get('heldPercentInsiders') or 0) * 100
+                inst = (info.get('heldPercentInstitutions') or 0) * 100
+                fig_pie = go.Figure(data=[go.Pie(labels=['Promoters', 'Institutions', 'Public'], values=[promo, inst, 100-(promo+inst)], hole=0.5)])
+                st.plotly_chart(fig_pie.update_layout(height=400, template="plotly_dark"), use_container_width=True)
 
-        with tabs[4]:
-            st.dataframe(stock_obj.actions.tail(10), use_container_width=True)
+            # --- ரேட்டிங் (Rating) ---
+            with tabs[3]:
+                score = 80 if (info.get('trailingPE', 100) < 30) else 45
+                color = "#39FF14" if score > 70 else "#FF3131"
+                st.markdown(f'<div style="text-align:center; padding:30px; border:2px solid {color}; border-radius:15px;"><h1>{score}/100</h1></div>', unsafe_allow_html=True)
 
-        with tabs[5]:
-            if st.button(f"➕ Add {u_input}"):
-                if u_input not in st.session_state['watchlist']:
-                    st.session_state['watchlist'].append(u_input)
-                    st.rerun()
-            for item in st.session_state['watchlist']:
-                c1, c2 = st.columns([5, 1])
-                c1.info(f"📌 {item}")
-                if c2.button("❌", key=item):
-                    st.session_state['watchlist'].remove(item)
-                    st.rerun()
-    else:
-        st.error(get_text("Data not found. Try adding .NS (eg: RELIANCE.NS)", "தகவல் கிடைக்கவில்லை. குறியீட்டைச் சரிபார்க்கவும்."))
+            # --- நிகழ்வுகள் (Actions) ---
+            with tabs[4]:
+                st.dataframe(stock_obj.actions.tail(10).sort_index(ascending=False), use_container_width=True)
 
-except Exception as e:
-    st.error(get_text("Please enter a valid symbol.", "சரியான பங்கு குறியீட்டை உள்ளிடவும்."))
+            # --- வாட்ச்லிஸ்ட் (Watchlist) ---
+            with tabs[5]:
+                if st.button(f"➕ Add {u_input}"):
+                    if u_input not in st.session_state['watchlist']:
+                        st.session_state['watchlist'].append(u_input)
+                        st.rerun()
+                for item in st.session_state['watchlist']:
+                    c1, c2 = st.columns([5, 1])
+                    c1.info(f"📌 {item}")
+                    if c2.button("❌", key=item):
+                        st.session_state['watchlist'].remove(item)
+                        st.rerun()
+        else:
+            st.error(get_text("Stock data not found. Check the symbol.", "தகவல்கள் கிடைக்கவில்லை. குறியீட்டைச் சரிபார்க்கவும்."))
+
+    except Exception as e:
+        st.error(get_text("Please enter a valid symbol (eg: RELIANCE, TCS).", "சரியான பங்கு குறியீட்டை உள்ளிடவும்."))
 
 st.markdown("<p style='text-align:center; color:#444; margin-top:50px;'>© 2026 TAMIL INVEST HUB PRO</p>", unsafe_allow_html=True)
