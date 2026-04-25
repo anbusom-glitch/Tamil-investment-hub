@@ -6,38 +6,67 @@ from datetime import datetime
 import base64
 from deep_translator import GoogleTranslator
 
-# --- 1. PAGE SETUP & CACHING ---
+# --- 1. பக்க அமைப்பு (Elite UI) ---
 st.set_page_config(page_title="TAMIL INVEST HUB", page_icon="🏦", layout="wide")
 
-# தகவல்களைத் தற்காலிகமாகச் சேமிக்க (Speed பெருக்குவதற்கு)
-@st.cache_data(ttl=3600) # 1 மணிநேரம் சேமிப்பில் இருக்கும்
-def fetch_stock_data(ticker):
-    try:
-        stock = yf.Ticker(ticker)
-        return stock, stock.info
-    except:
-        return None, None
+# வாட்ச்லிஸ்ட் நினைவகம் (Session State)
+if 'watchlist' not in st.session_state:
+    st.session_state['watchlist'] = []
 
-@st.cache_data(ttl=86400) # மொழிபெயர்ப்பை ஒரு நாள் சேமிக்க
-def translate_text(text):
+def get_base64_logo(bin_file):
+    try:
+        with open(bin_file, 'rb') as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    except: return None
+
+# தமிழ் மொழிபெயர்ப்பு
+def translate_to_tamil(text):
     if not text or len(text) < 5: return "தகவல் இல்லை."
     try:
         return GoogleTranslator(source='en', target='ta').translate(text[:1000])
     except:
         return text
 
-# வாட்ச்லிஸ்ட் நினைவகம்
-if 'watchlist' not in st.session_state:
-    st.session_state['watchlist'] = []
+# ஸ்மார்ட் சர்ச் (பெயர்களை குறியீடாக மாற்றுதல்)
+def get_clean_ticker(user_val):
+    mapping = {
+        "RELIANCE": "RELIANCE.NS", "SBI": "SBIN.NS", "SBIN": "SBIN.NS",
+        "COAL INDIA": "COALINDIA.NS", "TCS": "TCS.NS", "ITC": "ITC.NS",
+        "HDFC": "HDFCBANK.NS", "INFOSYS": "INFY.NS",
+        "ADANI": "ADANIENT.NS", "TATA MOTORS": "TATAMOTORS.NS"
+    }
+    val = user_val.strip().upper()
+    if val in mapping: return mapping[val]
+    if ".NS" not in val and ".BO" not in val: return f"{val}.NS"
+    return val
 
-# --- 2. PREMIUM CSS (White Text & Larger Font) ---
+# 2. லைவ் டிக்கர் (வெள்ளை நிற விலையுடன்)
+def get_ticker_text():
+    indices = ["^NSEI", "^BSESN", "RELIANCE.NS", "SBIN.NS", "TCS.NS"]
+    t_text = ""
+    for t in indices:
+        try:
+            d = yf.Ticker(t).fast_info
+            p, c = d['last_price'], d['year_change']*100
+            clr_arrow = "🟢" if c >= 0 else "🔴"
+            sym = t.replace(".NS", "").replace("^", "")
+            t_text += f" | {sym}: <span style='color:white;'>₹{p:,.1f}</span> {clr_arrow} "
+        except: continue
+    return t_text
+
+# 3. CSS (வெள்ளை நிறம், பெரிய எழுத்துக்கள், வண்ணத் தலைப்பு)
 st.markdown("""
     <style>
     html, body, [class*="css"] { 
         font-size: 13px !important; 
         background-color: #0d1117; 
-        color: #ffffff; /* அனைத்து எழுத்துக்களும் வெள்ளை */
+        color: #c9d1d9; 
     }
+    .ticker-wrap { width: 100%; overflow: hidden; background: #161b22; border-bottom: 1px solid #ffffff; padding: 6px 0; position: sticky; top: 0; z-index: 999; }
+    .ticker-move { display: inline-block; white-space: nowrap; animation: ticker 35s linear infinite; font-weight: bold; }
+    @keyframes ticker { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
+    
     .header-text { 
         background: linear-gradient(90deg, #2ea043, #f85149); 
         -webkit-background-clip: text; 
@@ -45,46 +74,60 @@ st.markdown("""
         font-size: 28px !important; 
         font-weight: 800; 
         text-align: center; 
+        margin-bottom: 5px; 
     }
-    .created-by { font-size: 12px; color: #8b949e; text-align: center; margin-top: -10px; margin-bottom: 20px; }
+    .created-by { 
+        font-size: 11px !important; 
+        color: #8b949e; 
+        text-align: center; 
+        margin-top: -8px; 
+        margin-bottom: 20px; 
+    }
     
-    .metric-row { 
-        background: #1c2128; 
-        border: 1px solid #30363d; 
-        border-radius: 10px; 
-        padding: 15px; 
-        margin-bottom: 10px; 
-        display: flex; 
-        justify-content: space-between; 
-    }
-    .m-label { color: #8b949e; font-size: 11px; text-transform: uppercase; }
+    .metric-row { background: #1c2128; border: 1px solid #30363d; border-radius: 10px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+    .m-label { color: #8b949e; font-size: 11px !important; text-transform: uppercase; }
     .m-value { color: #ffffff !important; font-size: 18px !important; font-weight: bold; }
     
-    /* Tabs எழுத்துக்கள் */
-    .stTabs [data-baseweb="tab"] { font-size: 13px !important; color: #ffffff !important; }
+    .news-card { background: #161b22; border-radius: 8px; padding: 12px; margin-bottom: 10px; border-left: 4px solid #ffffff; }
+    .news-title { color: #ffffff !important; font-size: 15px !important; font-weight: bold; text-decoration: none; }
+    
+    .stTabs [data-baseweb="tab"] {
+        font-size: 12px !important;
+        padding: 10px !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
-# தலைப்பு
+st.markdown(f'<div class="ticker-wrap"><div class="ticker-move">{get_ticker_text()}</div></div>', unsafe_allow_html=True)
+
+sel_lang = st.radio("Choose Language / மொழி", ["Tamil", "English"], horizontal=True)
+
+logo_b = get_base64_logo("logo.png")
+if logo_b:
+    st.markdown(f'<div style="text-align:center;"><img src="data:image/png;base64,{logo_b}" style="width:55px; border-radius:10px;"></div>', unsafe_allow_html=True)
+
 st.markdown('<p class="header-text">TAMIL INVEST HUB</p>', unsafe_allow_html=True)
 st.markdown('<p class="created-by">created by somasundaram</p>', unsafe_allow_html=True)
 
-# மொழி மற்றும் தேடல்
-sel_lang = st.radio("Choose Language", ["Tamil", "English"], horizontal=True)
+# 4. டேட்டா லோடிங் (பிழை வராமல் இருக்க கேச்சிங் முறை மாற்றப்பட்டுள்ளது)
 u_input = st.text_input("பங்கின் பெயர் (eg: Reliance, SBI, Coal India)", value="SBI").upper()
+ticker = get_clean_ticker(u_input)
 
-# ஸ்மார்ட் சர்ச் மேப்பிங்
-mapping = {"RELIANCE": "RELIANCE.NS", "SBI": "SBIN.NS", "SBIN": "SBIN.NS", "COAL INDIA": "COALINDIA.NS"}
-ticker = mapping.get(u_input, f"{u_input}.NS" if ".NS" not in u_input else u_input)
+@st.cache_data(ttl=600) # டேட்டாவை மட்டும் சேமிக்கிறது, ஆப்ஜெக்ட்டை அல்ல
+def fetch_info(symbol):
+    try:
+        return yf.Ticker(symbol).info
+    except:
+        return None
 
-# --- 3. DATA LOADING WITH FEEDBACK ---
-with st.spinner('தரவுகள் சேகரிக்கப்படுகின்றன...'):
-    stock_obj, info = fetch_stock_data(ticker)
+info = fetch_info(ticker)
 
-if stock_obj and 'longName' in info:
+if info and 'longName' in info:
+    stock_obj = yf.Ticker(ticker) # சார்ட்டிற்காக மட்டும் இதைப் பயன்படுத்துகிறோம்
+    
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
-        "📊 Analysis", "📝 Overview", "🤝 Shareholding", "🔮 Forecast", 
-        "📅 Action", "🗞️ News", "👀 Watchlist", "💼 Broker"
+        "📊 Analysis", "📝 Overview", "🤝 Shareholding", 
+        "🔮 Forecast", "📅 Action", "🗞️ News", "👀 Watchlist", "💼 Broker"
     ])
 
     with tab1:
@@ -95,6 +138,7 @@ if stock_obj and 'longName' in info:
                 st.rerun()
 
         ltp = info.get('currentPrice', 0) or info.get('regularMarketPrice', 0)
+        
         st.markdown(f"""
             <div class="metric-row">
                 <div><span class="m-label">விலை (LTP)</span><br><span class="m-value">₹{ltp:,.1f}</span></div>
@@ -102,44 +146,60 @@ if stock_obj and 'longName' in info:
             </div>
             <div class="metric-row">
                 <div><span class="m-label">P/B Ratio</span><br><span class="m-value">{info.get('priceToBook', 'N/A')}</span></div>
+                <div style="text-align:right;"><span class="m-label">PEG Ratio</span><br><span class="m-value">{info.get('pegRatio', 'N/A')}</span></div>
+            </div>
+            <div class="metric-row">
+                <div><span class="m-label">52W Low</span><br><span class="m-value">₹{info.get('fiftyTwoWeekLow', 0):,.1f}</span></div>
                 <div style="text-align:right;"><span class="m-label">52W High</span><br><span class="m-value">₹{info.get('fiftyTwoWeekHigh', 0):,.1f}</span></div>
             </div>
         """, unsafe_allow_html=True)
-        
-        hist = stock_obj.history(period="1mo")
+
+        pd_s = st.radio("Period", ["1d", "5d", "1mo", "1y"], horizontal=True)
+        hist = stock_obj.history(period=pd_s, interval="1m" if pd_s=="1d" else "1d")
         if not hist.empty:
-            fig = go.Figure(data=[go.Candlestick(x=hist.index, open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'])])
-            fig.update_layout(height=400, template="plotly_dark", xaxis_rangeslider_visible=False)
+            fig = go.Figure(data=[go.Candlestick(x=hist.index, open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'],
+                                                increasing_line_color='#2ea043', decreasing_line_color='#f85149')])
+            fig.update_layout(height=380, margin=dict(l=0,r=0,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', xaxis_rangeslider_visible=False)
             st.plotly_chart(fig, use_container_width=True)
 
     with tab2:
         st.markdown("### 📝 Overview")
-        desc_en = info.get('longBusinessSummary', 'தகவல் இல்லை.')
+        desc = info.get('longBusinessSummary', 'தகவல் இல்லை.')
         if sel_lang == "Tamil":
-            st.write(translate_text(desc_en))
-        else:
-            st.write(desc_en)
+            with st.spinner("தமிழில் மாற்றுகிறேன்..."):
+                st.write(translate_to_tamil(desc))
+        else: st.write(desc)
 
     with tab3:
-        st.markdown("### 🤝 Shareholding")
+        st.markdown("### 🤝 Shareholding Pattern")
         try:
             p_v = info.get('heldPercentInsiders', 0.5) * 100
             inst_v = info.get('heldPercentInstitutions', 0.3) * 100
-            fig_p = go.Figure(data=[go.Pie(labels=['Promoters', 'Institutions', 'Others'], values=[p_v, inst_v, 100-(p_v+inst_v)], hole=.5)])
-            fig_p.update_layout(height=300, template="plotly_dark")
+            fig_p = go.Figure(data=[go.Pie(labels=['Promoters', 'Institutions', 'Others'], values=[p_v, inst_v, 100-(p_v+inst_v)], hole=.5, marker=dict(colors=['#ffd700', '#58a6ff', '#2ea043']))])
+            fig_p.update_layout(height=250, margin=dict(l=0,r=0,t=10,b=10), legend=dict(orientation="h", y=-0.2))
             st.plotly_chart(fig_p, use_container_width=True)
         except: st.write("தகவல் இல்லை.")
 
-    with tab7:
-        st.markdown("### 👀 My Watchlist")
-        for item in st.session_state['watchlist']:
-            c1, c2 = st.columns([4,1])
-            c1.write(f"📈 {item}")
-            if c2.button("Delete", key=item):
-                st.session_state['watchlist'].remove(item)
-                st.rerun()
+    with tab4:
+        st.markdown("### 🔮 Forecast")
+        roe = info.get('returnOnEquity', 0)
+        if roe > 0.15: st.success("Strong Fundamental 🚀")
+        else: st.warning("Neutral Outlook ⚖️")
+        st.write(f"ROE: {roe*100:.2f}%")
 
-else:
-    st.warning("சரியான பங்குப் பெயரை உள்ளிடவும் அல்லது இணைய இணைப்பைச் சரிபார்க்கவும்.")
+    with tab5:
+        st.markdown("### 📅 Action (Dividends)")
+        try:
+            acts = stock_obj.actions.tail(10).sort_index(ascending=False)
+            if not acts.empty:
+                for date, row in acts.iterrows():
+                    if row.get('Dividends', 0) > 0: st.info(f"📅 {date.strftime('%d %b %Y')} - Dividend: ₹{row.get('Dividends')}")
+            else: st.write("தகவல் இல்லை.")
+        except: st.write("நிகழ்வுகள் இல்லை.")
 
-st.markdown("<div style='text-align:center;color:#444;font-size:11px;margin-top:50px;'>© 2026 TAMIL INVEST HUB</div>", unsafe_allow_html=True)
+    with tab6:
+        st.markdown("### 🗞️ News")
+        try:
+            for n in stock_obj.news[:10]:
+                ts = n.get('providerPublishTime', 0)
+                dt_s = datetime.fromtimestamp(ts).strftime('%d %b, %H:%M') if ts else "
