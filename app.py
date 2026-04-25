@@ -44,7 +44,7 @@ def get_ticker_text():
         except: continue
     return text
 
-# 3. ஸ்டைலிங் (CSS) - Double Color Title & News Cards
+# 3. ஸ்டைலிங் (CSS) - Gradient Title & UI
 st.markdown("""
     <style>
     [data-testid="stAppViewContainer"] { background-color: #0d1117; color: #c9d1d9; }
@@ -54,11 +54,16 @@ st.markdown("""
     .ticker-move { display: inline-block; white-space: nowrap; animation: ticker 40s linear infinite; font-weight: bold; }
     @keyframes ticker { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
     
-    /* தலைப்பு ஸ்டைல் */
+    /* தலைப்பு ஸ்டைல் - Double Shade Gradient */
     .header-container { text-align: center; margin: 20px 0; }
-    .main-title { font-size: 38px !important; font-weight: 800; margin-bottom: 0px; }
-    .title-tamil { color: #2ea043; } /* Green */
-    .title-invest { color: #ffd700; } /* Gold */
+    .main-title { 
+        font-size: 38px !important; 
+        font-weight: 900; 
+        margin-bottom: 0px;
+        background: linear-gradient(90deg, #2ea043, #ffd700);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
     .sub-title { font-size: 14px !important; color: #8b949e; font-style: italic; margin-top: -5px; }
     
     /* மெட்ரிக்ஸ் */
@@ -79,17 +84,14 @@ with st.sidebar:
     st.markdown("### ⚙️ Settings")
     sel_lang = st.radio("Language / மொழி", ["Tamil", "English"], horizontal=True)
 
-# லோகோ மற்றும் தலைப்பு (இரண்டு வண்ணம்)
+# லோகோ மற்றும் தலைப்பு
 logo_b = get_base64_logo("logo.png")
 if logo_b:
     st.markdown(f'<div style="text-align:center;"><img src="data:image/png;base64,{logo_b}" style="width:65px; border-radius:12px;"></div>', unsafe_allow_html=True)
 
 st.markdown(f"""
     <div class="header-container">
-        <p class="main-title">
-            <span class="title-tamil">TAMIL</span> 
-            <span class="title-invest">INVEST HUB</span>
-        </p>
+        <p class="main-title">TAMIL INVEST HUB</p>
         <p class="sub-title">created by somasundaram</p>
     </div>
     """, unsafe_allow_html=True)
@@ -110,11 +112,11 @@ try:
 except:
     st.info("சரியான பங்கு குறியீட்டை உள்ளிடவும்...")
 
-# 6. டேப்கள் (Tabs)
+# 6. டேப்கள் (Tabs) - Watchlist ஐகான் நீக்கப்பட்டது
 if stock_loaded:
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "📊 Analysis", "📝 Overview", "🤝 Shareholding", 
-        "🔮 Forecast", "📅 Action", "🗞️ News", "👀 Watchlist"
+        "🔮 Forecast", "📅 Action", "🗞️ News", "Watchlist"
     ])
 
     with tab1:
