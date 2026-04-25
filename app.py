@@ -20,7 +20,7 @@ def get_base64_logo(bin_file):
         return base64.b64encode(data).decode()
     except: return None
 
-# உறுதியான தமிழ் மொழிபெயர்ப்பு
+# தமிழ் மொழிபெயர்ப்பு
 def translate_to_tamil(text):
     if not text or len(text) < 5: return "தகவல் இல்லை."
     try:
@@ -41,7 +41,7 @@ def get_clean_ticker(user_val):
     if ".NS" not in val and ".BO" not in val: return f"{val}.NS"
     return val
 
-# 2. லைவ் டிக்கர் (வெள்ளை நிற எழுத்துக்கள்)
+# 2. லைவ் டிக்கர்
 def get_ticker_text():
     indices = ["^NSEI", "^BSESN", "RELIANCE.NS", "SBIN.NS", "TCS.NS"]
     t_text = ""
@@ -55,7 +55,7 @@ def get_ticker_text():
         except: continue
     return t_text
 
-# 3. CSS (பச்சை-சிவப்பு தலைப்பு, வெள்ளை எழுத்துக்கள் & பெரிய அளவு)
+# 3. CSS
 st.markdown("""
     <style>
     html, body, [class*="css"] { 
@@ -63,7 +63,7 @@ st.markdown("""
         background-color: #0d1117; 
         color: #ffffff; 
     }
-    .ticker-wrap { width: 100%; overflow: hidden; background: #161b22; border-bottom: 1px solid #ffffff; padding: 6px 0; position: sticky; top: 0; z-index: 999; }
+    .ticker-wrap { width: 100%; overflow: hidden; background: #161b22; border-bottom: 1px solid #ffffff; padding: 8px 0; position: sticky; top: 0; z-index: 999; }
     .ticker-move { display: inline-block; white-space: nowrap; animation: ticker 35s linear infinite; font-weight: bold; }
     @keyframes ticker { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
     
@@ -86,8 +86,6 @@ st.markdown("""
     
     .metric-row { background: #1c2128; border: 1px solid #30363d; border-radius: 10px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
     .m-label { color: #8b949e; font-size: 10.5px !important; text-transform: uppercase; }
-    
-    /* வெள்ளை நிற எழுத்துக்கள் மற்றும் பெரிய அளவு */
     .m-value { color: #ffffff !important; font-size: 17px !important; font-weight: bold; }
     
     .news-card { background: #161b22; border-radius: 8px; padding: 12px; margin-bottom: 10px; border-left: 4px solid #ffffff; }
@@ -102,14 +100,12 @@ st.markdown("""
 
 st.markdown(f'<div class="ticker-wrap"><div class="ticker-move">{get_ticker_text()}</div></div>', unsafe_allow_html=True)
 
-# முகப்புப் பக்க மொழித் தேர்வு
 sel_lang = st.radio("Choose Language / மொழி", ["Tamil", "English"], horizontal=True)
 
 logo_b = get_base64_logo("logo.png")
 if logo_b:
     st.markdown(f'<div style="text-align:center;"><img src="data:image/png;base64,{logo_b}" style="width:50px; border-radius:10px;"></div>', unsafe_allow_html=True)
 
-# தலைப்பு மற்றும் உருவாக்கியவர்
 st.markdown('<p class="header-text">TAMIL INVEST HUB</p>', unsafe_allow_html=True)
 st.markdown('<p class="created-by">created by somasundaram</p>', unsafe_allow_html=True)
 
@@ -117,7 +113,6 @@ st.markdown('<p class="created-by">created by somasundaram</p>', unsafe_allow_ht
 u_input = st.text_input("பங்கின் பெயர் (eg: Reliance, SBI, Coal India)", value="SBI").upper()
 ticker = get_clean_ticker(u_input)
 
-# தரவு சேகரிப்பு
 stock_loaded = False
 info = {}
 stock_obj = None
@@ -131,17 +126,18 @@ try:
 except:
     pass
 
-# 5. TABS
+# 5. TABS (வாட்ச்லிஸ்டில் கண் ஐகான் நீக்கப்பட்டது)
 if stock_loaded:
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "📊 Analysis", "📝 Overview", "🤝 Shareholding", 
-        "🔮 Forecast", "📅 Action", "🗞️ News", "👀 Watchlist", "💼 Broker"
+        "🔮 Forecast", "📅 Action", "🗞️ News", "Watchlist", "💼 Broker"
     ])
 
     with tab1:
         st.markdown(f"### {info.get('longName', ticker)}")
         
-        if st.button(f"⭐ Add {u_input} to Watchlist"):
+        # --- ADD BUTTON ---
+        if st.button(f"Add {u_input} to Watchlist"):
             if u_input not in st.session_state['watchlist']:
                 st.session_state['watchlist'].append(u_input)
                 st.rerun()
@@ -204,7 +200,7 @@ if stock_loaded:
                 for date, row in acts.iterrows():
                     if row.get('Dividends', 0) > 0: st.info(f"📅 {date.strftime('%d %b %Y')} - Dividend: ₹{row.get('Dividends')}")
             else: st.write("தகவல் இல்லை.")
-        except: st.write("நிகழ்வுகளைப் பெறுவதில் பிழை.")
+        except: pass
 
     with tab6:
         st.markdown("### 🗞️ News")
@@ -213,15 +209,15 @@ if stock_loaded:
                 ts = n.get('providerPublishTime', 0)
                 dt_s = datetime.fromtimestamp(ts).strftime('%d %b, %H:%M') if ts else "சமீபத்தில்"
                 st.markdown(f'<div class="news-card"><a href="{n.get("link","#")}" target="_blank" class="news-title">{n.get("title","News")}</a><br><small>{n.get("publisher","Market")} • {dt_s}</small></div>', unsafe_allow_html=True)
-        except:
-            st.write("செய்திகள் இல்லை.")
+        except: pass
 
     with tab7:
-        st.markdown("### 👀 My Watchlist")
+        st.markdown("### My Watchlist")
         if st.session_state['watchlist']:
             for item in st.session_state['watchlist']:
                 col_name, col_del = st.columns([4, 1])
                 col_name.markdown(f"📈 **{item}**")
+                # --- REMOVE BUTTON ---
                 if col_del.button("Delete 🗑️", key=f"del_{item}"):
                     st.session_state['watchlist'].remove(item)
                     st.rerun()
@@ -229,7 +225,7 @@ if stock_loaded:
             st.info("வாட்ச்லிஸ்ட் காலியாக உள்ளது.")
 
     with tab8:
-        st.markdown("### 💼 Broker")
+        st.markdown("### 💼 Broker Connect")
         st.button("🔗 Connect Zerodha", use_container_width=True)
         st.button("🔗 Connect Angel One", use_container_width=True)
 
