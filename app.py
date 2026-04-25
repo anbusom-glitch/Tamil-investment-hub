@@ -25,18 +25,32 @@ st.markdown("""
         -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
     .sub-title { font-size: 10px !important; color: #8b949e; letter-spacing: 2px; text-transform: uppercase; margin-top: 5px; }
+    
+    /* Global Card Style */
     .metric-row { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
     .m-label { color: #8b949e; font-size: 10px; text-transform: uppercase; font-weight: 700; }
     .m-value { color: #ffffff; font-size: 15px; font-weight: 800; }
-    .advice-box { padding: 15px; border-radius: 12px; text-align: center; border: 1px solid; margin-bottom: 20px; }
+    
+    /* 🌟 World Class Watchlist Card 🌟 */
+    .watchlist-card {
+        background: #1c2128; border: 1px solid #30363d; border-radius: 14px;
+        padding: 12px 18px; margin-bottom: 10px; display: flex;
+        justify-content: space-between; align-items: center;
+        transition: 0.3s ease;
+    }
+    .watchlist-card:hover { border-color: #39FF14; background: #21262d; }
+    .stock-name { font-size: 16px; font-weight: 700; color: #ffffff; display: flex; align-items: center; gap: 10px; }
+    
+    .login-box { background: #1c2128; border: 1px solid #30363d; border-radius: 15px; padding: 35px; max-width: 400px; margin: auto; }
     </style>
     """, unsafe_allow_html=True)
 
-# 3. LOGIN SYSTEM
+# 3. LOGIN
 if not st.session_state['is_logged_in']:
     st.markdown('<div class="header-container"><p class="main-title">TAMIL INVEST HUB</p></div>', unsafe_allow_html=True)
     with st.container():
-        st.markdown('<div style="background:#1c2128; padding:35px; border-radius:15px; max-width:400px; margin:auto; border:1px solid #30363d;">', unsafe_allow_html=True)
+        st.markdown('<div class="login-box">', unsafe_allow_html=True)
+        st.subheader("Sign In")
         u_id = st.text_input("User ID")
         u_pass = st.text_input("Password", type="password")
         if st.button("Login 🚀", use_container_width=True):
@@ -68,74 +82,71 @@ try:
     stock = yf.Ticker(ticker)
     info = stock.info
 
-    # --- TAB 1: ANALYSIS (METRICS ADDED BACK) ---
+    # --- TAB 1: ANALYSIS ---
     with tabs[0]:
         st.subheader(info.get('longName', ticker))
         ltp = info.get('currentPrice') or info.get('regularMarketPrice') or 0
-        
-        # Fundamental Grid
         c1, c2 = st.columns(2)
-        m1 = [
-            (get_text("LTP", "தற்போதைய விலை"), f"₹{ltp:,.2f}"),
-            (get_text("Market Cap", "சந்தை மதிப்பு"), f"₹{info.get('marketCap', 0)/10000000:,.0f} Cr"),
-            (get_text("52W High", "52 வார உச்சம்"), f"₹{info.get('fiftyTwoWeekHigh', 0):,.2f}"),
-            (get_text("52W Low", "52 வார நீச்சம்"), f"₹{info.get('fiftyTwoWeekLow', 0):,.2f}")
-        ]
-        m2 = [
-            (get_text("P/E Ratio", "பி.இ விகிதம்"), info.get('trailingPE', 'N/A')),
-            (get_text("ROE", "ROE (%)"), f"{(info.get('returnOnEquity', 0)*100):.2f}%"),
-            (get_text("Dividend Yield", "டிவிடெண்ட்"), f"{(info.get('dividendYield', 0)*100):.2f}%"),
-            (get_text("Sector", "துறை"), info.get('sector', 'N/A'))
-        ]
-        
+        m1 = [(get_text("Price", "விலை"), f"₹{ltp:,.2f}"), (get_text("Market Cap", "சந்தை மதிப்பு"), f"₹{info.get('marketCap', 0)/10000000:,.0f} Cr")]
+        m2 = [(get_text("P/E Ratio", "பி.இ விகிதம்"), info.get('trailingPE', 'N/A')), (get_text("Sector", "துறை"), info.get('sector', 'N/A'))]
         for l, v in m1: c1.markdown(f'<div class="metric-row"><span class="m-label">{l}</span><span class="m-value">{v}</span></div>', unsafe_allow_html=True)
         for l, v in m2: c2.markdown(f'<div class="metric-row"><span class="m-label">{l}</span><span class="m-value">{v}</span></div>', unsafe_allow_html=True)
-        
-        with st.expander(get_text("About Company ⬇️", "நிறுவனத்தைப் பற்றி ⬇️")):
-            about = info.get('longBusinessSummary', 'No description.')
-            st.write(GoogleTranslator(source='auto', target='ta').translate(about) if st.session_state['language']=="Tamil" else about)
+        with st.expander(get_text("About Company", "நிறுவனத்தைப் பற்றி")):
+            st.write(GoogleTranslator(source='auto', target='ta').translate(info.get('longBusinessSummary', '')) if st.session_state['language']=="Tamil" else info.get('longBusinessSummary', ''))
 
     # --- TAB 2: FORECAST ---
     with tabs[1]:
         score = 80 if info.get('trailingPE', 100) < 25 else 45
         adv, clr = (get_text("Buy", "வாங்கலாம்"), "#39FF14") if score > 70 else (get_text("Hold", "தொடரலாம்"), "#00D1FF")
-        st.markdown(f'<div class="advice-box" style="border-color: {clr}; background: {clr}05;"><p style="font-size:16px; font-weight:700; color:{clr}; margin:0;">{adv}</p></div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="padding:15px; border-radius:12px; text-align:center; border:1px solid {clr}; background:{clr}05;"><p style="font-size:16px; font-weight:700; color:{clr}; margin:0;">{adv}</p></div>', unsafe_allow_html=True)
 
-    # --- TAB 3: SHAREHOLDING (FII/DII) ---
+    # --- TAB 3: SHAREHOLDING ---
     with tabs[2]:
-        st.markdown(f"### {get_text('Shareholding Pattern', 'பங்குதாரர் விபரம்')}")
         promo = (info.get('heldPercentInsiders') or 0) * 100
         inst = (info.get('heldPercentInstitutions') or 0) * 100
-        fii = info.get('foreignInstitutionalHolders', inst * 0.6)
-        dii = inst - fii
-        fig = go.Figure(data=[go.Pie(labels=['Promoters', 'FII', 'DII', 'Public'], values=[promo, fii, dii, max(0, 100-(promo+inst))], hole=0.5)])
+        fig = go.Figure(data=[go.Pie(labels=['Promoters', 'Institutions', 'Public'], values=[promo, inst, max(0, 100-(promo+inst))], hole=0.5)])
         st.plotly_chart(fig.update_layout(template="plotly_dark", height=400), use_container_width=True)
 
-    # --- TAB 4: FINANCIALS (PROFIT, DEBT, GROWTH, RESERVES) ---
+    # --- TAB 4: FINANCIALS ---
     with tabs[3]:
-        st.markdown(f"### {get_text('Key Financials', 'நிதிநிலை விவரங்கள்')}")
-        balance_sheet = stock.balance_sheet
-        reserves = 0
-        if not balance_sheet.empty and 'Retained Earnings' in balance_sheet.index:
-            reserves = balance_sheet.loc['Retained Earnings'].iloc[0]
-
-        f_metrics = [
+        st.markdown(f"### {get_text('Key Metrics', 'நிதிநிலை')}")
+        f_m = [
             (get_text("Net Profit", "நிகர லாபம்"), f"₹{info.get('netIncomeToCommon', 0)/10000000:,.2f} Cr"),
             (get_text("Total Debt", "மொத்த கடன்"), f"₹{info.get('totalDebt', 0)/10000000:,.2f} Cr"),
-            (get_text("Cash", "பணப்புழக்கம்"), f"₹{info.get('totalCash', 0)/10000000:,.2f} Cr"),
-            (get_text("Revenue Growth", "வருவாய் வளர்ச்சி"), f"{(info.get('revenueGrowth', 0)*100):.2f}%"),
-            (get_text("Reserves", "இருப்பு நிதி"), f"₹{reserves/10000000:,.2f} Cr")
+            (get_text("Growth", "வளர்ச்சி"), f"{(info.get('revenueGrowth', 0)*100):.2f}%")
         ]
-        for lbl, val in f_metrics:
+        for lbl, val in f_m:
             st.markdown(f'<div class="metric-row"><span class="m-label">{lbl}</span><span class="m-value">{val}</span></div>', unsafe_allow_html=True)
 
-    # --- TAB 5: WATCHLIST ---
+    # --- 🌟 TAB 5: WORLD CLASS WATCHLIST 🌟 ---
     with tabs[4]:
-        if st.button(f"Add {u_input}"):
-            if u_input not in st.session_state['watchlist']: st.session_state['watchlist'].append(u_input); st.rerun()
-        for i in st.session_state['watchlist']: st.info(f"📌 {i}")
+        st.markdown(f"### {get_text('My Watchlist', 'எனது வாட்ச்லிஸ்ட்')}")
+        
+        # Add Button
+        if st.button(f"🚀 {get_text('Add', 'சேர்க்க')} {u_input}", use_container_width=True):
+            if u_input not in st.session_state['watchlist']:
+                st.session_state['watchlist'].append(u_input)
+                st.rerun()
+        
+        st.write("---")
+        
+        # List items with modern icons and delete buttons
+        for i in st.session_state['watchlist']:
+            col_stock, col_del = st.columns([6, 1])
+            
+            # Stock Card with Trend Icon
+            col_stock.markdown(f"""
+                <div class="watchlist-card">
+                    <div class="stock-name">📈 {i}</div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            # Custom styled Delete Button
+            if col_del.button("❌", key=f"del_{i}"):
+                st.session_state['watchlist'].remove(i)
+                st.rerun()
 
 except Exception:
-    st.error("சரியான குறியீட்டை உள்ளிடவும்.")
+    st.error("Error loading data.")
 
 st.markdown("<p style='text-align:center; color:#444; font-size:10px; margin-top:50px;'>© 2026 TAMIL INVEST HUB PRO | Created by Somasundaram</p>", unsafe_allow_html=True)
