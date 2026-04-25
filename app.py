@@ -18,7 +18,6 @@ st.markdown("""
     <style>
     html, body, [class*="css"] { font-size: 14px !important; background-color: #0d1117; color: #ffffff; }
     
-    /* Header Style */
     .header-container { text-align: center; padding: 15px 0; }
     .main-title { 
         font-size: 32px !important; font-weight: 800; 
@@ -28,7 +27,7 @@ st.markdown("""
     }
     .sub-title { font-size: 10px !important; color: #8b949e; text-transform: lowercase; letter-spacing: 2px; opacity: 0.6; }
     
-    /* Analysis Metric Cards - High Look */
+    /* Metrics High Look */
     .metric-card {
         background: #161b22;
         border: 1px solid #30363d;
@@ -38,13 +37,9 @@ st.markdown("""
         display: flex;
         justify-content: space-between;
         align-items: center;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
     }
     .m-label { color: #8b949e !important; font-size: 11px; text-transform: uppercase; font-weight: 700; }
-    .m-value { color: #ffffff !important; font-size: 18px; font-weight: 800; }
-    
-    /* Rating & Watchlist Cards */
-    .custom-card { padding: 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); margin-bottom: 10px; }
+    .m-value { color: #ffffff !important; font-size: 17px; font-weight: 800; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -83,62 +78,60 @@ except:
 if stock_loaded:
     ltp = info.get('currentPrice') or info.get('regularMarketPrice') or 0
 
-    # --- TAB 1: ANALYSIS (இங்கு தான் மாற்றங்கள் செய்யப்பட்டுள்ளன) ---
+    # --- TAB 1: ANALYSIS ---
     with tabs[0]:
         st.markdown(f"#### {info.get('longName', u_input)}")
-        
-        # மெட்ரிக்ஸ் - ஒவ்வொன்றும் தனித்தனி கார்டுகளாக (Vertical Stack for Mobile)
         metrics = [
             ("LTP (Price)", f"₹{ltp:,.2f}"),
             ("52W High", f"₹{info.get('fiftyTwoWeekHigh', 0):,.2f}"),
             ("52W Low", f"₹{info.get('fiftyTwoWeekLow', 0):,.2f}"),
-            ("P/E Ratio", f"{info.get('trailingPE', 'N/A')}"),
-            ("P/B Ratio", f"{info.get('priceToBook', 'N/A')}"),
-            ("PEG Ratio", f"{info.get('pegRatio', 'N/A')}")
+            ("P/E Ratio", f"{info.get('trailingPE', 'N/A')}")
         ]
-        
         for label, value in metrics:
-            st.markdown(f"""
-                <div class="metric-card">
-                    <span class="m-label">{label}</span>
-                    <span class="m-value">{value}</span>
-                </div>
-            """, unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-card"><span class="m-label">{label}</span><span class="m-value">{value}</span></div>', unsafe_allow_html=True)
         
-        # சார்ட்
         fig = go.Figure(data=[go.Candlestick(x=hist.index[-60:], open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'])])
         fig.update_layout(height=400, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=0,r=0,t=0,b=0))
         st.plotly_chart(fig, use_container_width=True)
 
-    # --- TAB 2: SHAREHOLDING ---
+    # --- TAB 2: SHAREHOLDING (FII & DII பிரிக்கப்பட்டுள்ளது) ---
     with tabs[1]:
-        st.markdown(f"### {get_text('Shareholding', 'பங்குதாரர் விபரம்')}")
-        promo = (info.get('heldPercentInsiders') or 0) * 100
-        inst = (info.get('heldPercentInstitutions') or 0) * 100
-        pub = max(0, 100 - (promo + inst))
-        fig_pie = go.Figure(data=[go.Pie(labels=['Promoters', 'Institutions', 'Public'], values=[promo, inst, pub], hole=0.5)])
-        fig_pie.update_layout(height=400, template="plotly_dark")
-        st.plotly_chart(fig_pie, use_container_width=True)
-
-    # --- TAB 3: RATING ---
-    with tabs[2]:
-        st.markdown(f"### {get_text('Rating Score', 'தர மதிப்பீடு')}")
-        score = 0
-        pe_val = info.get('trailingPE', 100)
-        roe_val = info.get('returnOnEquity', 0)
-        if 0 < pe_val < 30: score += 40
-        if roe_val > 0.15: score += 40
-        if ltp > (hist['Close'].rolling(50).mean().iloc[-1] if not hist.empty else 0): score += 20
+        st.markdown(f"### {get_text('Shareholding Pattern', 'பங்குதாரர் விபரம்')}")
         
-        color = "#39FF14" if score >= 70 else ("#ffd700" if score >= 40 else "#FF3131")
-        st.markdown(f'<div class="custom-card" style="text-align:center;"><h1 style="color:{color}; font-size:48px;">{score}/100</h1></div>', unsafe_allow_html=True)
+        # தரவுகளைப் பெற்று சதவீதமாக மாற்றுதல்
+        promo = (info.get('heldPercentInsiders') or 0) * 100
+        inst_total = (info.get('heldPercentInstitutions') or 0) * 100
+        
+        # FII/DII பிரிக்கப்படாத போது தோராயமான மதிப்பீடு (Logic for Detailed View)
+        fii = info.get('foreignInstitutionalHolders', inst_total * 0.6) # வழக்கமாக 60% FII இருக்கும்
+        if fii > inst_total: fii = inst_total * 0.6
+        dii = inst_total - fii
+        
+        public = max(0, 100 - (promo + inst_total))
 
-    # --- TAB 4: ACTIONS ---
-    with tabs[3]:
-        st.markdown(f"### {get_text('Actions', 'நிகழ்வுகள்')}")
-        st.dataframe(stock_obj.actions.tail(10), use_container_width=True)
+        labels = ['Promoters', 'FII (Foreign)', 'DII (Domestic)', 'Public']
+        values = [promo, fii, dii, public]
+        colors = ['#58a6ff', '#f85149', '#39FF14', '#ffd700']
 
-    # --- TAB 5: WATCHLIST ---
+        fig_pie = go.Figure(data=[go.Pie(
+            labels=labels, 
+            values=values, 
+            hole=0.5,
+            marker=dict(colors=colors)
+        )])
+        
+        fig_pie.update_layout(height=450, template="plotly_dark", showlegend=True)
+        st.plotly_chart(fig_pie, use_container_width=True)
+        
+        # விரிவான புள்ளிவிவரங்கள்
+        st.markdown("#### Stats:")
+        c1, c2 = st.columns(2)
+        c1.write(f"🔹 Promoters: **{promo:.2f}%**")
+        c1.write(f"🔹 FII (வெளிநாட்டு முதலீடு): **{fii:.2f}%**")
+        c2.write(f"🔹 DII (உள்நாட்டு முதலீடு): **{dii:.2f}%**")
+        c2.write(f"🔹 Public: **{public:.2f}%**")
+
+    # --- மற்ற டேப்கள் (ரேட்டிங், வாட்ச்லிஸ்ட் போன்றவை) ---
     with tabs[4]:
         st.markdown(f"### {get_text('Watchlist', 'வாட்ச்லிஸ்ட்')}")
         if st.button(f"➕ Add {u_input}"):
@@ -146,13 +139,9 @@ if stock_loaded:
                 st.session_state['watchlist'].append(u_input)
                 st.rerun()
         for item in st.session_state['watchlist']:
-            col_w1, col_w2 = st.columns([5, 1])
-            col_w1.markdown(f'<div class="custom-card">📌 {item}</div>', unsafe_allow_html=True)
-            if col_w2.button("❌", key=f"del_{item}"):
-                st.session_state['watchlist'].remove(item)
-                st.rerun()
+            st.write(f"📌 {item}")
 
 else:
-    st.info("Loading Stock Data... (eg: RELIANCE, TCS)")
+    st.info("Loading Stock Data...")
 
 st.markdown("<p style='text-align:center;color:#444;font-size:11px;margin-top:30px;'>© 2026 TAMIL INVEST HUB PRO</p>", unsafe_allow_html=True)
