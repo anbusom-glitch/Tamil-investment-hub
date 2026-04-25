@@ -3,16 +3,15 @@ import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
-import base64
 from deep_translator import GoogleTranslator
 
-# 1. பக்க அமைப்பு
+# 1. பக்க அமைப்பு மற்றும் பிரீமியம் கான்ஃபிக்
 st.set_page_config(page_title="TAMIL INVEST HUB PRO", page_icon="📈", layout="wide")
 
 if 'watchlist' not in st.session_state:
     st.session_state['watchlist'] = []
 
-# அதிவேக மொழிபெயர்ப்பு
+# அதிவேக மொழிபெயர்ப்பு - பிழைகளைத் தவிர்க்க try-except
 @st.cache_data(show_spinner=False)
 def translate_to_tamil(text):
     if not text or len(str(text)) < 2: return "தகவல் இல்லை."
@@ -20,16 +19,17 @@ def translate_to_tamil(text):
         return GoogleTranslator(source='en', target='ta').translate(str(text)[:1000])
     except: return str(text)
 
-# 2. மேம்படுத்தப்பட்ட CSS (Big Font & Normal Round Style)
+# 2. உலகத்தரம் வாய்ந்த CSS (பெரிய எழுத்துக்கள் & பிரகாசமான தலைப்பு)
 st.markdown("""
     <style>
-    /* எழுத்து அளவை அதிகரித்துள்ளேன் */
+    /* Global Big Font */
     html, body, [class*="css"] { font-size: 15px !important; background-color: #0d1117; color: #ffffff; }
     
     .ticker-wrap { width: 100%; overflow: hidden; background: #161b22; border-bottom: 2px solid #39FF14; padding: 12px 0; position: sticky; top: 0; z-index: 999; }
     .ticker-move { display: inline-block; white-space: nowrap; animation: ticker 40s linear infinite; font-size: 14px; font-weight: bold; }
     @keyframes ticker { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
     
+    /* Neon Glow Title */
     .header-container { text-align: center; margin: 20px 0; }
     .main-title { 
         font-size: 45px !important; 
@@ -37,25 +37,25 @@ st.markdown("""
         background: linear-gradient(90deg, #39FF14, #FF3131);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        text-shadow: 0px 0px 15px rgba(57, 255, 20, 0.4);
-        margin-bottom: 0px;
+        text-shadow: 0px 0px 20px rgba(57, 255, 20, 0.4);
     }
     .sub-title { font-size: 15px !important; color: #8b949e; font-style: italic; margin-top: -5px; }
     
-    .metric-row { background: #1c2128; border: 1px solid #30363d; border-radius: 10px; padding: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; }
+    /* Metric Boxes - White Labels */
+    .metric-row { background: #1c2128; border: 1px solid #30363d; border-radius: 10px; padding: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
     .m-label { color: #ffffff !important; font-size: 12px; text-transform: uppercase; opacity: 0.8; }
     .m-value { color: #ffffff !important; font-size: 18px; font-weight: bold; }
     
-    /* பிழையற்ற நியூஸ் கார்டு */
+    /* UI Buttons & Tabs */
     .news-card { background: #161b22; border-radius: 8px; padding: 15px; margin-bottom: 10px; border-left: 5px solid #39FF14; }
-    
+    .rating-box { padding: 20px; border-radius: 12px; text-align: center; font-weight: bold; font-size: 22px; border: 1px solid rgba(255,255,255,0.2); }
     [data-testid="stHeader"] { height: 0px; }
     </style>
     """, unsafe_allow_html=True)
 
 # 3. லைவ் டிக்கர்
 def get_ticker_text():
-    indices = ["^NSEI", "^BSESN", "RELIANCE.NS", "SBIN.NS", "TCS.NS"]
+    indices = ["^NSEI", "^BSESN", "RELIANCE.NS", "SBIN.NS", "TCS.NS", "HDFCBANK.NS"]
     text = ""
     for t in indices:
         try:
@@ -76,30 +76,30 @@ st.markdown(f"""
     </div>
     """, unsafe_allow_html=True)
 
-# 4. சர்ச்
-u_input = st.text_input("Search Symbol (eg: TCS, RELIANCE)", value="RELIANCE", label_visibility="collapsed").upper()
+# 4. சர்ச் இன்ஜின்
+u_input = st.text_input("Search Stock (eg: RELIANCE, TCS, ZOMATO)", value="RELIANCE", label_visibility="collapsed").upper()
 ticker = f"{u_input}.NS" if ".NS" not in u_input and "^" not in u_input else u_input
 
-# 5. டேப்கள்
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "📊 Analysis", "⭐ Ratings", "🔮 Forecast", "📅 Action", "🗞️ News", "📌 Watchlist"
+# 5. டேப்கள் (Overview மீண்டும் சேர்க்கப்பட்டுள்ளது)
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+    "📊 Analysis", "📝 Overview", "🤝 Shareholding", "⭐ Ratings", "🔮 Forecast", "🗞️ News", "📌 Watchlist"
 ])
 
+# டேட்டா லோடிங் செக்ஷன்
 stock_loaded = False
 info = {}
 try:
     stock_obj = yf.Ticker(ticker)
     info = stock_obj.info
-    hist = stock_obj.history(period="1y")
-    if 'symbol' in info or 'longName' in info:
+    if info and (info.get('symbol') or info.get('longName')):
+        hist = stock_obj.history(period="1y")
         stock_loaded = True
-except:
-    pass
+except Exception as e:
+    stock_loaded = False
 
-# TAB 1: ANALYSIS
-with tab1:
-    if stock_loaded:
-        st.markdown(f"<p style='font-size:20px; font-weight:bold;'>{info.get('longName', 'N/A')}</p>", unsafe_allow_html=True)
+if stock_loaded:
+    with tab1:
+        st.markdown(f"### {info.get('longName', u_input)}")
         ltp = info.get('currentPrice') or info.get('regularMarketPrice') or 0
         c1, c2 = st.columns(2)
         with c1:
@@ -113,55 +113,76 @@ with tab1:
         fig.update_layout(height=450, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=0,r=0,t=0,b=0))
         st.plotly_chart(fig, use_container_width=True)
 
-# TAB 2: RATINGS (Normal Round Chart)
-with tab2:
-    if stock_loaded:
-        st.markdown("### Shareholding Pattern (Normal Round)")
-        promo = info.get('heldPercentInsiders', 0) * 100
-        inst = info.get('heldPercentInstitutions', 0) * 100
-        public = 100 - (promo + inst)
+    with tab2:
+        st.markdown("### 📝 Overview (நிறுவன விளக்கம்)")
+        # இங்கே பிழை ஏற்படாமல் இருக்க பாதுகாப்பான முறையில் டேட்டா எடுக்கப்படுகிறது
+        summary = info.get('longBusinessSummary') or info.get('description') or "விளக்கம் கிடைக்கவில்லை."
+        with st.spinner("தமிழில் மொழிபெயர்க்கிறேன்..."):
+            tamil_summary = translate_to_tamil(summary)
+            st.write(tamil_summary)
         
-        labels = ['Promoters', 'Institutions', 'Public']
-        values = [promo, inst, max(0, public)]
-        
-        # 3D நீக்கப்பட்டு சாதாரண ரவுண்ட் வடிவம்
-        fig_pie = go.Figure(data=[go.Pie(labels=labels, values=values, hole=0.5)]) 
-        fig_pie.update_layout(height=400, template="plotly_dark", showlegend=True)
+        st.divider()
+        st.write(f"**Sector:** {info.get('sector', 'N/A')}")
+        st.write(f"**Industry:** {info.get('industry', 'N/A')}")
+        st.write(f"**Website:** {info.get('website', 'N/A')}")
+
+    with tab3:
+        st.markdown("### Shareholding Pattern")
+        p, i = info.get('heldPercentInsiders', 0)*100, info.get('heldPercentInstitutions', 0)*100
+        fig_pie = go.Figure(data=[go.Pie(labels=['Promoters', 'Institutions', 'Public'], values=[p, i, 100-(p+i)], hole=0.5)])
+        fig_pie.update_layout(height=400, template="plotly_dark")
         st.plotly_chart(fig_pie, use_container_width=True)
 
-# TAB 5: NEWS (KeyError Fix)
-with tab5:
-    if stock_loaded:
+    with tab4:
+        st.markdown("### Stock Ratings (AI Verdict)")
+        score = 0
+        pe = info.get('trailingPE', 100)
+        roe = info.get('returnOnEquity', 0)
+        ltp = info.get('currentPrice', 0)
+        ma50 = hist['Close'].rolling(50).mean().iloc[-1] if not hist.empty else 0
+        
+        if pe < 30: score += 1
+        if roe > 0.15: score += 1
+        if ltp > ma50: score += 1
+
+        if score == 3: st.markdown('<div class="rating-box" style="background:#39FF14; color:black;">STRONG BUY 🚀</div>', unsafe_allow_html=True)
+        elif score == 2: st.markdown('<div class="rating-box" style="background:#ffd700; color:black;">HOLD / NEUTRAL ⚖️</div>', unsafe_allow_html=True)
+        else: st.markdown('<div class="rating-box" style="background:#FF3131; color:white;">AVOID / SELL ⚠️</div>', unsafe_allow_html=True)
+
+    with tab5:
+        st.markdown("### Forecast (கணிப்பு)")
+        target = info.get('targetMeanPrice')
+        if target:
+            upside = ((target - ltp) / ltp) * 100
+            st.metric("Target Price", f"₹{target:,.2f}", f"{upside:.2f}% Upside")
+        else: st.info("தரவுகள் கிடைக்கவில்லை.")
+
+    with tab6:
+        st.markdown("### Live News Feed")
         try:
             news_list = stock_obj.news
             if news_list:
                 for n in news_list[:5]:
-                    title = n.get('title', 'No Title Available')
-                    link = n.get('link', '#')
-                    pub = n.get('publisher', 'Market News')
-                    st.markdown(f"""
-                        <div class="news-card">
-                            <a href="{link}" target="_blank" style="color:#39FF14; font-weight:bold; font-size:17px; text-decoration:none;">{title}</a><br>
-                            <small style="color:#8b949e;">{pub}</small>
-                        </div>
-                    """, unsafe_allow_html=True)
-            else: st.write("செய்திகள் இல்லை.")
-        except: st.error("செய்திகளைப் பெறுவதில் பிழை.")
+                    st.markdown(f'<div class="news-card"><a href="{n.get("link","#")}" target="_blank" style="color:#39FF14; font-weight:bold; font-size:17px; text-decoration:none;">{n.get("title")}</a><br><small style="color:#8b949e;">{n.get("publisher")}</small></div>', unsafe_allow_html=True)
+            else: st.write("செய்திகள் ஏதுமில்லை.")
+        except: st.error("செய்திகளை லோடு செய்வதில் பிழை.")
 
-# TAB 6: WATCHLIST
-with tab6:
-    st.markdown("### My Watchlist")
-    if st.button(f"➕ Add {u_input}"):
-        if u_input not in st.session_state['watchlist']:
-            st.session_state['watchlist'].append(u_input)
-            st.rerun()
-    
-    st.divider()
-    for item in st.session_state['watchlist']:
-        cw1, cw2 = st.columns([5, 1])
-        cw1.write(f"**📌 {item}**")
-        if cw2.button("Remove", key=f"del_{item}"):
-            st.session_state['watchlist'].remove(item)
-            st.rerun()
+    with tab7:
+        st.markdown("### My Watchlist")
+        if st.button(f"➕ Add {u_input} to Watchlist"):
+            if u_input not in st.session_state['watchlist']:
+                st.session_state['watchlist'].append(u_input)
+                st.rerun()
+        
+        st.divider()
+        for item in st.session_state['watchlist']:
+            cw1, cw2 = st.columns([5, 1])
+            cw1.write(f"**📌 {item}**")
+            if cw2.button("Remove", key=f"del_{item}"):
+                st.session_state['watchlist'].remove(item)
+                st.rerun()
+
+else:
+    st.info("Loading Stock Data... சரியான பங்கு பெயரைக் குறிப்பிடவும்.")
 
 st.markdown("<div style='text-align:center;color:#444;font-size:12px;margin-top:30px;'>© 2026 TAMIL INVEST HUB PRO</div>", unsafe_allow_html=True)
