@@ -28,7 +28,7 @@ def translate_to_tamil(text):
     except:
         return text
 
-# ஸ்மார்ட் சர்ச் (பெயர்களை குறியீடாக மாற்றுதல்)
+# ஸ்மார்ட் சர்ச்
 def get_clean_ticker(user_val):
     mapping = {
         "RELIANCE": "RELIANCE.NS", "SBI": "SBIN.NS", "SBIN": "SBIN.NS",
@@ -41,7 +41,7 @@ def get_clean_ticker(user_val):
     if ".NS" not in val and ".BO" not in val: return f"{val}.NS"
     return val
 
-# 2. லைவ் டிக்கர் (வெள்ளை நிற விலையுடன்)
+# 2. லைவ் டிக்கர் (வெள்ளை நிற எழுத்துக்கள்)
 def get_ticker_text():
     indices = ["^NSEI", "^BSESN", "RELIANCE.NS", "SBIN.NS", "TCS.NS"]
     t_text = ""
@@ -55,18 +55,19 @@ def get_ticker_text():
         except: continue
     return t_text
 
-# 3. CSS (வெள்ளை நிறம், பெரிய எழுத்துக்கள், வண்ணத் தலைப்பு)
+# 3. வடிவமைப்பு (CSS - பச்சை-சிவப்பு தலைப்பு & வெள்ளை எழுத்துக்கள்)
 st.markdown("""
     <style>
     html, body, [class*="css"] { 
-        font-size: 13px !important; 
+        font-size: 13.5px !important; /* எழுத்துரு அளவு அதிகரிப்பு */
         background-color: #0d1117; 
-        color: #c9d1d9; 
+        color: #ffffff; 
     }
     .ticker-wrap { width: 100%; overflow: hidden; background: #161b22; border-bottom: 1px solid #ffffff; padding: 6px 0; position: sticky; top: 0; z-index: 999; }
     .ticker-move { display: inline-block; white-space: nowrap; animation: ticker 35s linear infinite; font-weight: bold; }
     @keyframes ticker { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
     
+    /* பச்சை மற்றும் சிவப்பு கலந்த தலைப்பு */
     .header-text { 
         background: linear-gradient(90deg, #2ea043, #f85149); 
         -webkit-background-clip: text; 
@@ -85,11 +86,13 @@ st.markdown("""
     }
     
     .metric-row { background: #1c2128; border: 1px solid #30363d; border-radius: 10px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-    .m-label { color: #8b949e; font-size: 11px !important; text-transform: uppercase; }
-    .m-value { color: #ffffff !important; font-size: 18px !important; font-weight: bold; }
+    .m-label { color: #8b949e; font-size: 10.5px !important; text-transform: uppercase; }
+    
+    /* வெள்ளை நிற எழுத்துக்கள் மற்றும் பெரிய அளவு */
+    .m-value { color: #ffffff !important; font-size: 17px !important; font-weight: bold; }
     
     .news-card { background: #161b22; border-radius: 8px; padding: 12px; margin-bottom: 10px; border-left: 4px solid #ffffff; }
-    .news-title { color: #ffffff !important; font-size: 15px !important; font-weight: bold; text-decoration: none; }
+    .news-title { color: #ffffff !important; font-size: 14.5px !important; font-weight: bold; text-decoration: none; }
     
     .stTabs [data-baseweb="tab"] {
         font-size: 12px !important;
@@ -104,27 +107,31 @@ sel_lang = st.radio("Choose Language / மொழி", ["Tamil", "English"], hori
 
 logo_b = get_base64_logo("logo.png")
 if logo_b:
-    st.markdown(f'<div style="text-align:center;"><img src="data:image/png;base64,{logo_b}" style="width:55px; border-radius:10px;"></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="text-align:center;"><img src="data:image/png;base64,{logo_b}" style="width:50px; border-radius:10px;"></div>', unsafe_allow_html=True)
 
+# தலைப்பு மற்றும் Created By
 st.markdown('<p class="header-text">TAMIL INVEST HUB</p>', unsafe_allow_html=True)
 st.markdown('<p class="created-by">created by somasundaram</p>', unsafe_allow_html=True)
 
-# 4. டேட்டா லோடிங் (பிழை வராமல் இருக்க கேச்சிங் முறை மாற்றப்பட்டுள்ளது)
+# 4. தேடல்
 u_input = st.text_input("பங்கின் பெயர் (eg: Reliance, SBI, Coal India)", value="SBI").upper()
 ticker = get_clean_ticker(u_input)
 
-@st.cache_data(ttl=600) # டேட்டாவை மட்டும் சேமிக்கிறது, ஆப்ஜெக்ட்டை அல்ல
-def fetch_info(symbol):
-    try:
-        return yf.Ticker(symbol).info
-    except:
-        return None
+# தரவு சேகரிப்பு
+stock_loaded = False
+info = {}
 
-info = fetch_info(ticker)
+try:
+    with st.spinner('Loading...'):
+        stock_obj = yf.Ticker(ticker)
+        info = stock_obj.info
+        if 'longName' in info:
+            stock_loaded = True
+except:
+    st.info("Loading Data...")
 
-if info and 'longName' in info:
-    stock_obj = yf.Ticker(ticker) # சார்ட்டிற்காக மட்டும் இதைப் பயன்படுத்துகிறோம்
-    
+# 5. TABS
+if stock_loaded:
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "📊 Analysis", "📝 Overview", "🤝 Shareholding", 
         "🔮 Forecast", "📅 Action", "🗞️ News", "👀 Watchlist", "💼 Broker"
@@ -132,6 +139,8 @@ if info and 'longName' in info:
 
     with tab1:
         st.markdown(f"### {info.get('longName', ticker)}")
+        
+        # Watchlist Add Button
         if st.button(f"⭐ Add {u_input} to Watchlist"):
             if u_input not in st.session_state['watchlist']:
                 st.session_state['watchlist'].append(u_input)
@@ -154,7 +163,7 @@ if info and 'longName' in info:
             </div>
         """, unsafe_allow_html=True)
 
-        pd_s = st.radio("Period", ["1d", "5d", "1mo", "1y"], horizontal=True)
+        pd_s = st.radio("Period", ["1d", "5d", "1mo", "1y"], horizontal=True, key="main_chart")
         hist = stock_obj.history(period=pd_s, interval="1m" if pd_s=="1d" else "1d")
         if not hist.empty:
             fig = go.Figure(data=[go.Candlestick(x=hist.index, open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'],
@@ -164,11 +173,11 @@ if info and 'longName' in info:
 
     with tab2:
         st.markdown("### 📝 Overview")
-        desc = info.get('longBusinessSummary', 'தகவல் இல்லை.')
+        desc_en = info.get('longBusinessSummary', 'தகவல் இல்லை.')
         if sel_lang == "Tamil":
             with st.spinner("தமிழில் மாற்றுகிறேன்..."):
-                st.write(translate_to_tamil(desc))
-        else: st.write(desc)
+                st.write(translate_to_tamil(desc_en))
+        else: st.write(desc_en)
 
     with tab3:
         st.markdown("### 🤝 Shareholding Pattern")
@@ -176,30 +185,30 @@ if info and 'longName' in info:
             p_v = info.get('heldPercentInsiders', 0.5) * 100
             inst_v = info.get('heldPercentInstitutions', 0.3) * 100
             fig_p = go.Figure(data=[go.Pie(labels=['Promoters', 'Institutions', 'Others'], values=[p_v, inst_v, 100-(p_v+inst_v)], hole=.5, marker=dict(colors=['#ffd700', '#58a6ff', '#2ea043']))])
-            fig_p.update_layout(height=250, margin=dict(l=0,r=0,t=10,b=10), legend=dict(orientation="h", y=-0.2))
+            # பை-சார்ட் அளவு சிறியதாக்கப்பட்டுள்ளது
+            fig_p.update_layout(height=240, margin=dict(l=0,r=0,t=10,b=10), legend=dict(orientation="h", y=-0.2))
             st.plotly_chart(fig_p, use_container_width=True)
         except: st.write("தகவல் இல்லை.")
 
     with tab4:
         st.markdown("### 🔮 Forecast")
         roe = info.get('returnOnEquity', 0)
-        if roe > 0.15: st.success("Strong Fundamental 🚀")
-        else: st.warning("Neutral Outlook ⚖️")
+        if roe > 0.15: 
+            st.success("Strong Fundamental 🚀")
+        else: 
+            st.warning("Neutral Outlook ⚖️")
         st.write(f"ROE: {roe*100:.2f}%")
 
     with tab5:
         st.markdown("### 📅 Action (Dividends)")
-        try:
-            acts = stock_obj.actions.tail(10).sort_index(ascending=False)
-            if not acts.empty:
-                for date, row in acts.iterrows():
-                    if row.get('Dividends', 0) > 0: st.info(f"📅 {date.strftime('%d %b %Y')} - Dividend: ₹{row.get('Dividends')}")
-            else: st.write("தகவல் இல்லை.")
-        except: st.write("நிகழ்வுகள் இல்லை.")
+        acts = stock_obj.actions.tail(10).sort_index(ascending=False)
+        if not acts.empty:
+            for date, row in acts.iterrows():
+                if row.get('Dividends', 0) > 0: st.info(f"📅 {date.strftime('%d %b %Y')} - Dividend: ₹{row.get('Dividends')}")
+        else: st.write("தகவல் இல்லை.")
 
     with tab6:
         st.markdown("### 🗞️ News")
         try:
             for n in stock_obj.news[:10]:
                 ts = n.get('providerPublishTime', 0)
-                dt_s = datetime.fromtimestamp(ts).strftime('%d %b, %H:%M') if ts else "
