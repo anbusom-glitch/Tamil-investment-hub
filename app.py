@@ -6,7 +6,7 @@ from datetime import datetime
 import base64
 from deep_translator import GoogleTranslator
 
-# 1. பக்க அமைப்பு மற்றும் கான்ஃபிக்
+# 1. பக்க அமைப்பு
 st.set_page_config(page_title="TAMIL INVEST HUB PRO", page_icon="📈", layout="wide")
 
 if 'watchlist' not in st.session_state:
@@ -20,7 +20,7 @@ def translate_to_tamil(text):
         return GoogleTranslator(source='en', target='ta').translate(str(text)[:1000])
     except: return str(text)
 
-# 2. பிரீமியம் CSS (Small Font & High-Quality UI)
+# 2. பிரீமியம் CSS (Small Font & Professional UI)
 st.markdown("""
     <style>
     html, body, [class*="css"] { font-size: 11px !important; background-color: #0d1117; color: #c9d1d9; }
@@ -58,11 +58,11 @@ def get_ticker_text():
 
 st.markdown(f'<div class="ticker-wrap"><div class="ticker-move">{get_ticker_text()}</div></div>', unsafe_allow_html=True)
 
-# தலைப்பு
+# பிராண்ட் ஹெடர்
 st.markdown('<p class="main-title">TAMIL INVEST HUB</p>', unsafe_allow_html=True)
 st.markdown('<p style="text-align:center; font-size:10px; color:#8b949e; margin-top:-5px;">created by somasundaram</p>', unsafe_allow_html=True)
 
-# 4. சர்ச் மற்றும் டேட்டா
+# 4. சர்ச் மற்றும் டேட்டா லோடிங்
 u_input = st.text_input("Search Symbol", value="RELIANCE", label_visibility="collapsed").upper()
 ticker = f"{u_input}.NS" if ".NS" not in u_input and "^" not in u_input else u_input
 
@@ -72,104 +72,80 @@ try:
     hist = stock_obj.history(period="1y")
 
     if 'symbol' in info:
-        # டேப்கள் - விரிவான பகுப்பாய்வு
+        # டேப்கள்
         tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
             "📊 Analysis", "⭐ Ratings", "🔮 Forecast", "📅 Action", "🗞️ News", "📌 Watchlist"
         ])
 
         with tab1:
-            st.markdown(f"<p style='font-size:14px; font-weight:bold;'>{info.get('longName')} Analysis</p>", unsafe_allow_html=True)
+            st.markdown(f"**{info.get('longName')} Analysis**")
             ltp = info.get('currentPrice') or info.get('regularMarketPrice') or 0
             
-            # மெட்ரிக்ஸ்
             col_m1, col_m2 = st.columns(2)
             with col_m1:
-                st.markdown(f'<div class="metric-row"><div><span class="m-label">LTP</span><br><span class="m-value">₹{ltp:,.2f}</span></div></div>', unsafe_allow_html=True)
-                st.markdown(f'<div class="metric-row"><div><span class="m-label">P/E Ratio</span><br><span class="m-value">{info.get("trailingPE", "N/A")}</span></div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-row"><div><span class="m-label">PRICE (LTP)</span><br><span class="m-value">₹{ltp:,.2f}</span></div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-row"><div><span class="m-label">P/E RATIO</span><br><span class="m-value">{info.get("trailingPE", "N/A")}</span></div></div>', unsafe_allow_html=True)
             with col_m2:
-                st.markdown(f'<div class="metric-row"><div><span class="m-label">Market Cap</span><br><span class="m-value">₹{info.get("marketCap", 0)//10**7:,.0f} Cr</span></div></div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="metric-row"><div><span class="m-label">MARKET CAP</span><br><span class="m-value">₹{info.get("marketCap", 0)//10**7:,.0f} Cr</span></div></div>', unsafe_allow_html=True)
                 st.markdown(f'<div class="metric-row"><div><span class="m-label">ROE</span><br><span class="m-value">{info.get("returnOnEquity", 0)*100:.2f}%</span></div></div>', unsafe_allow_html=True)
             
-            # சார்ட்
             fig = go.Figure(data=[go.Candlestick(x=hist.index[-60:], open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'])])
-            fig.update_layout(height=280, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=0,r=0,t=0,b=0))
+            fig.update_layout(height=300, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=0,r=0,t=0,b=0))
             st.plotly_chart(fig, use_container_width=True)
 
         with tab2:
-            st.markdown("### Stock Ratings & AI Verdict")
+            st.markdown("### Stock Ratings & 3D Pattern")
             score = 0
-            pe = info.get('trailingPE', 100)
-            roe = info.get('returnOnEquity', 0)
-            debt = info.get('debtToEquity', 100)
+            if info.get('trailingPE', 100) < 30: score += 1
+            if info.get('returnOnEquity', 0) > 0.15: score += 1
+            if ltp > hist['Close'].rolling(50).mean().iloc[-1]: score += 1
 
-            if pe < 25: score += 1
-            if roe > 0.18: score += 1
-            if debt < 100: score += 1
-
-            if score == 3: st.markdown('<div class="rating-box" style="background:#2ea043;">EXCELLENT (Strong Buy) 🚀</div>', unsafe_allow_html=True)
-            elif score == 2: st.markdown('<div class="rating-box" style="background:#ffd700; color:black;">GOOD (Hold) ⚖️</div>', unsafe_allow_html=True)
-            else: st.markdown('<div class="rating-box" style="background:#f85149;">AVOID (Risky) ⚠️</div>', unsafe_allow_html=True)
+            if score == 3: st.markdown('<div class="rating-box" style="background:#2ea043;">STRONG BUY 🚀</div>', unsafe_allow_html=True)
+            elif score == 2: st.markdown('<div class="rating-box" style="background:#ffd700; color:black;">HOLD ⚖️</div>', unsafe_allow_html=True)
+            else: st.markdown('<div class="rating-box" style="background:#f85149;">AVOID ⚠️</div>', unsafe_allow_html=True)
             
-            # 3D Effect Shareholding Pattern
-            st.markdown("---")
-            st.write("Shareholding (3D Visual)")
-            p = info.get('heldPercentInsiders', 0) * 100
-            i = info.get('heldPercentInstitutions', 0) * 100
+            p, i = info.get('heldPercentInsiders', 0)*100, info.get('heldPercentInstitutions', 0)*100
             fig_3d = go.Figure(data=[go.Pie(labels=['Promoters', 'Institutions', 'Public'], values=[p, i, 100-(p+i)], hole=.6, pull=[0.1, 0, 0])])
-            fig_3d.update_layout(height=250, margin=dict(l=0,r=0,t=0,b=0), showlegend=True)
             st.plotly_chart(fig_3d, use_container_width=True)
 
         with tab3:
-            st.markdown("### Forecast (எதிர்காலக் கணிப்பு)")
+            st.markdown("### Forecast (கணிப்பு)")
             target = info.get('targetMeanPrice')
             if target:
                 upside = ((target - ltp) / ltp) * 100
-                st.write(f"சராசரி இலக்கு விலை (Target): ₹{target:,.2f}")
-                st.metric("எதிர்பார்க்கப்படும் உயர்வு (Potential Upside)", f"{upside:.2f}%")
-            else:
-                st.info("தற்போது கணிப்பு விவரங்கள் கிடைக்கவில்லை.")
-            
-            st.markdown("---")
-            st.write("Financial Estimates (அடுத்த காலாண்டு)")
-            st.write(f"EPS Estimate: {info.get('earningsQuarterlyGrowth', 'N/A')}")
-            st.write(f"Revenue Growth: {info.get('revenueGrowth', 0)*100:.2f}%")
+                st.metric("எதிர்பார்க்கப்படும் இலக்கு (Target)", f"₹{target:,.2f}", f"{upside:.2f}% Upside")
+            else: st.info("தரவுகள் கிடைக்கவில்லை.")
 
         with tab4:
-            st.markdown("### Corporate Action (நிகழ்வுகள்)")
-            actions = stock_obj.actions.tail(10).sort_index(ascending=False)
-            if not actions.empty:
-                st.dataframe(actions, use_container_width=True)
-            else:
-                st.write("சமீபத்திய நிகழ்வுகள் ஏதுமில்லை.")
+            st.markdown("### Corporate Action")
+            st.dataframe(stock_obj.actions.tail(10).sort_index(ascending=False), use_container_width=True)
 
         with tab5:
-            st.markdown("### Live News Feed")
-            news = stock_obj.news
-            if news:
-                for n in news[:8]:
-                    st.markdown(f"""
-                        <div class="news-card">
-                            <a href="{n.get('link')}" target="_blank" style="color:#f85149; text-decoration:none; font-weight:bold; font-size:13px;">{n.get('title')}</a><br>
-                            <small style="color:#8b949e;">{n.get('publisher')} • {datetime.fromtimestamp(n.get('providerPublishTime')).strftime('%d %b %H:%M')}</small>
-                        </div>
-                    """, unsafe_allow_html=True)
-            else:
-                st.write("செய்திகள் இல்லை.")
+            st.markdown("### Live News")
+            for n in stock_obj.news[:5]:
+                st.markdown(f'<div class="news-card"><a href="{n["link"]}" target="_blank" style="color:#f85149; font-weight:bold;">{n["title"]}</a></div>', unsafe_allow_html=True)
 
         with tab6:
             st.markdown("### My Watchlist")
-            if st.button(f"➕ Add {u_input}"):
-                if u_input not in st.session_state['watchlist']:
-                    st.session_state['watchlist'].append(u_input)
-                    st.rerun()
-            for item in st.session_state['watchlist']:
-                c1, c2 = st.columns([5, 1])
-                c1.write(f"📌 {item}")
-                if c2.button("Remove", key=f"del_{item}"):
-                    st.session_state['watchlist'].remove(item)
-                    st.rerun()
+            # முக்கிய மாற்றம்: பட்டன் இங்கே தெளிவாகத் தெரியும்
+            col_btn1, col_btn2 = st.columns([1, 1])
+            with col_btn1:
+                if st.button(f"➕ Add {u_input} to Watchlist"):
+                    if u_input not in st.session_state['watchlist']:
+                        st.session_state['watchlist'].append(u_input)
+                        st.rerun()
+            
+            st.divider()
+            if st.session_state['watchlist']:
+                for item in st.session_state['watchlist']:
+                    cw1, cw2 = st.columns([4, 1])
+                    cw1.write(f"📌 {item}")
+                    if cw2.button("Remove", key=f"del_{item}"):
+                        st.session_state['watchlist'].remove(item)
+                        st.rerun()
+            else: st.write("வாட்ச்லிஸ்ட் காலியாக உள்ளது.")
 
-except Exception as e:
-    st.info("பங்கு விவரங்களை லோடு செய்கிறது... சரியான குறியீட்டை உள்ளிடவும்.")
+except Exception:
+    st.info("Loading Stock Data...")
 
 st.markdown("<div style='text-align:center;color:#444;font-size:9px;margin-top:30px;'>© 2026 TAMIL INVEST HUB PRO</div>", unsafe_allow_html=True)
