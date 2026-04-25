@@ -32,7 +32,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 3. LOGIN
+# 3. LOGIN SYSTEM
 if not st.session_state['is_logged_in']:
     st.markdown('<div class="header-container"><p class="main-title">TAMIL INVEST HUB</p></div>', unsafe_allow_html=True)
     with st.container():
@@ -41,10 +41,9 @@ if not st.session_state['is_logged_in']:
         u_pass = st.text_input("Password", type="password")
         if st.button("Login 🚀", use_container_width=True):
             if u_id and u_pass: st.session_state['is_logged_in'] = True; st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
-# 4. HEADER
+# 4. DASHBOARD HEADER
 col_t1, col_t2 = st.columns([8, 2])
 with col_t2:
     st.session_state['language'] = st.radio("L", ["Tamil", "English"], horizontal=True, label_visibility="collapsed")
@@ -52,7 +51,7 @@ with col_t2:
 
 st.markdown(f"""<div class="header-container"><p class="main-title">TAMIL INVEST HUB</p><p class="sub-title">created by somasundaram</p></div>""", unsafe_allow_html=True)
 
-# 5. SEARCH
+# 5. SEARCH ENGINE
 u_input = st.text_input("Search Symbol", value="RELIANCE").upper().strip()
 ticker = u_input if any(x in u_input for x in [".NS", ".BO"]) else f"{u_input}.NS"
 
@@ -69,23 +68,42 @@ try:
     stock = yf.Ticker(ticker)
     info = stock.info
 
-    # --- TAB 1: ANALYSIS ---
+    # --- TAB 1: ANALYSIS (METRICS ADDED BACK) ---
     with tabs[0]:
         st.subheader(info.get('longName', ticker))
         ltp = info.get('currentPrice') or info.get('regularMarketPrice') or 0
-        st.markdown(f'<div class="metric-row"><span class="m-label">LTP (விலை)</span><span class="m-value">₹{ltp:,.2f}</span></div>', unsafe_allow_html=True)
+        
+        # Fundamental Grid
+        c1, c2 = st.columns(2)
+        m1 = [
+            (get_text("LTP", "தற்போதைய விலை"), f"₹{ltp:,.2f}"),
+            (get_text("Market Cap", "சந்தை மதிப்பு"), f"₹{info.get('marketCap', 0)/10000000:,.0f} Cr"),
+            (get_text("52W High", "52 வார உச்சம்"), f"₹{info.get('fiftyTwoWeekHigh', 0):,.2f}"),
+            (get_text("52W Low", "52 வார நீச்சம்"), f"₹{info.get('fiftyTwoWeekLow', 0):,.2f}")
+        ]
+        m2 = [
+            (get_text("P/E Ratio", "பி.இ விகிதம்"), info.get('trailingPE', 'N/A')),
+            (get_text("ROE", "ROE (%)"), f"{(info.get('returnOnEquity', 0)*100):.2f}%"),
+            (get_text("Dividend Yield", "டிவிடெண்ட்"), f"{(info.get('dividendYield', 0)*100):.2f}%"),
+            (get_text("Sector", "துறை"), info.get('sector', 'N/A'))
+        ]
+        
+        for l, v in m1: c1.markdown(f'<div class="metric-row"><span class="m-label">{l}</span><span class="m-value">{v}</span></div>', unsafe_allow_html=True)
+        for l, v in m2: c2.markdown(f'<div class="metric-row"><span class="m-label">{l}</span><span class="m-value">{v}</span></div>', unsafe_allow_html=True)
+        
         with st.expander(get_text("About Company ⬇️", "நிறுவனத்தைப் பற்றி ⬇️")):
-            about = info.get('longBusinessSummary', 'No data.')
+            about = info.get('longBusinessSummary', 'No description.')
             st.write(GoogleTranslator(source='auto', target='ta').translate(about) if st.session_state['language']=="Tamil" else about)
 
     # --- TAB 2: FORECAST ---
     with tabs[1]:
         score = 80 if info.get('trailingPE', 100) < 25 else 45
         adv, clr = (get_text("Buy", "வாங்கலாம்"), "#39FF14") if score > 70 else (get_text("Hold", "தொடரலாம்"), "#00D1FF")
-        st.markdown(f'<div class="advice-box" style="border-color: {clr}; background: {clr}05;"><p style="font-size:16px; font-weight:700; color:{clr};">{adv}</p></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="advice-box" style="border-color: {clr}; background: {clr}05;"><p style="font-size:16px; font-weight:700; color:{clr}; margin:0;">{adv}</p></div>', unsafe_allow_html=True)
 
     # --- TAB 3: SHAREHOLDING (FII/DII) ---
     with tabs[2]:
+        st.markdown(f"### {get_text('Shareholding Pattern', 'பங்குதாரர் விபரம்')}")
         promo = (info.get('heldPercentInsiders') or 0) * 100
         inst = (info.get('heldPercentInstitutions') or 0) * 100
         fii = info.get('foreignInstitutionalHolders', inst * 0.6)
@@ -93,35 +111,21 @@ try:
         fig = go.Figure(data=[go.Pie(labels=['Promoters', 'FII', 'DII', 'Public'], values=[promo, fii, dii, max(0, 100-(promo+inst))], hole=0.5)])
         st.plotly_chart(fig.update_layout(template="plotly_dark", height=400), use_container_width=True)
 
-    # --- TAB 4: FINANCIALS (REQUESTED METRICS ONLY) ---
+    # --- TAB 4: FINANCIALS (PROFIT, DEBT, GROWTH, RESERVES) ---
     with tabs[3]:
-        st.markdown(f"### {get_text('Key Financial Metrics', 'முக்கிய நிதிநிலை அளவீடுகள்')}")
-        
-        # Financial Data Fetching
+        st.markdown(f"### {get_text('Key Financials', 'நிதிநிலை விவரங்கள்')}")
         balance_sheet = stock.balance_sheet
-        cash_flow = stock.cashflow
-        financials = stock.financials
-        
-        def get_val(df, keys):
-            for k in keys:
-                if k in df.index: return df.loc[k].iloc[0]
-            return 0
-
-        # Extracting specific metrics
-        net_profit = info.get('netIncomeToCommon', 0)
-        total_debt = info.get('totalDebt', 0)
-        cash = info.get('totalCash', 0)
-        reserves = get_val(balance_sheet, ['Retained Earnings', 'Other Stockholders Equity'])
-        revenue_growth = info.get('revenueGrowth', 0) * 100
+        reserves = 0
+        if not balance_sheet.empty and 'Retained Earnings' in balance_sheet.index:
+            reserves = balance_sheet.loc['Retained Earnings'].iloc[0]
 
         f_metrics = [
-            (get_text("Net Profit", "நிகர லாபம்"), f"₹{net_profit/10000000:,.2f} Cr"),
-            (get_text("Total Debt", "மொத்த கடன்"), f"₹{total_debt/10000000:,.2f} Cr"),
-            (get_text("Cash Flow", "பணப்புழக்கம் (Cash)"), f"₹{cash/10000000:,.2f} Cr"),
-            (get_text("Growth (Revenue)", "வளர்ச்சி (வருவாய்)"), f"{revenue_growth:.2f}%"),
+            (get_text("Net Profit", "நிகர லாபம்"), f"₹{info.get('netIncomeToCommon', 0)/10000000:,.2f} Cr"),
+            (get_text("Total Debt", "மொத்த கடன்"), f"₹{info.get('totalDebt', 0)/10000000:,.2f} Cr"),
+            (get_text("Cash", "பணப்புழக்கம்"), f"₹{info.get('totalCash', 0)/10000000:,.2f} Cr"),
+            (get_text("Revenue Growth", "வருவாய் வளர்ச்சி"), f"{(info.get('revenueGrowth', 0)*100):.2f}%"),
             (get_text("Reserves", "இருப்பு நிதி"), f"₹{reserves/10000000:,.2f} Cr")
         ]
-
         for lbl, val in f_metrics:
             st.markdown(f'<div class="metric-row"><span class="m-label">{lbl}</span><span class="m-value">{val}</span></div>', unsafe_allow_html=True)
 
