@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 from deep_translator import GoogleTranslator
 from datetime import datetime
 
-# 1. பக்க அமைப்பு
+# 1. பக்க அமைப்பு மற்றும் செஷன்
 st.set_page_config(page_title="TAMIL INVEST HUB PRO", page_icon="📈", layout="wide")
 
 if 'watchlist' not in st.session_state: st.session_state['watchlist'] = []
@@ -36,7 +36,7 @@ st.markdown("""
     .metric-box { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
     .m-label { color: #8b949e; font-size: 11px; font-weight: 700; text-transform: uppercase; }
     .m-value { color: #ffffff; font-size: 16px; font-weight: 800; }
-    .news-card { background: #1c2128; border-radius: 10px; padding: 15px; margin-bottom: 10px; border-left: 4px solid #39FF14; }
+    .stExpander { background: rgba(57, 255, 20, 0.05) !important; border: 1px solid #39FF14 !important; border-radius: 12px !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -53,29 +53,28 @@ st.markdown(f"""
     """, unsafe_allow_html=True)
 
 # 4. சர்ச்
-u_input = st.text_input("Search Symbol", value="RELIANCE").upper().strip()
+u_input = st.text_input("Search Symbol (eg: RELIANCE)", value="RELIANCE").upper().strip()
 ticker = u_input if any(x in u_input for x in [".NS", ".BO"]) else f"{u_input}.NS"
 
+# 5. டேப்கள் (News டேப் நீக்கப்பட்டுள்ளது)
 tabs = st.tabs([
     f"📊 {get_text('Analysis', 'பகுப்பாய்வு')}", 
-    f"🗞️ {get_text('News', 'செய்திகள்')}",
     f"🤝 {get_text('Shareholding', 'பங்குதாரர்')}", 
     f"⭐ {get_text('Rating', 'ரேட்டிங்')}", 
     f"📅 {get_text('Actions', 'நிகழ்வுகள்')}",
     f"📌 {get_text('Watchlist', 'வாட்ச்லிஸ்ட்')}"
 ])
 
-# 5. பாதுகாப்பான டேட்டா லோடிங் (Individually Protected)
+# 6. தரவுகளைப் பெறுதல்
 try:
     stock_obj = yf.Ticker(ticker)
-    
-    # Analysis Tab
+    info = stock_obj.info
+    hist = stock_obj.history(period="1y")
+
+    # --- Analysis Tab ---
     with tabs[0]:
         try:
-            info = stock_obj.info
-            hist = stock_obj.history(period="1y")
             st.subheader(info.get('longName', ticker))
-            
             ltp = info.get('currentPrice') or info.get('regularMarketPrice') or (hist['Close'].iloc[-1] if not hist.empty else 0)
             
             m_data = [
@@ -89,49 +88,55 @@ try:
             
             if not hist.empty:
                 fig = go.Figure(data=[go.Candlestick(x=hist.index[-60:], open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'])])
-                fig.update_layout(height=400, template="plotly_dark", xaxis_rangeslider_visible=False)
+                fig.update_layout(height=400, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=0,r=0,t=0,b=0))
                 st.plotly_chart(fig, use_container_width=True)
             
             with st.expander(get_text("About Company ⬇️", "நிறுவனத்தைப் பற்றி ⬇️")):
                 summary = info.get('longBusinessSummary', 'No data.')
                 st.write(translate_text(summary, st.session_state['language']))
-        except: st.error("Analysis data error.")
+        except: st.error("Analysis loading error.")
 
-    # News Tab
+    # --- Shareholding Tab (FII/DII விபரங்களுடன்) ---
     with tabs[1]:
-        try:
-            news = stock_obj.news
-            for n in news[:5]:
-                st.markdown(f'<div class="news-card"><a href="{n["link"]}" style="color:#39FF14;">{n["title"]}</a></div>', unsafe_allow_html=True)
-        except: st.info("News not available.")
-
-    # Shareholding Tab
-    with tabs[2]:
+        st.markdown(f"### {get_text('Shareholding Pattern', 'பங்குதாரர் விபரம்')}")
         try:
             promo = (info.get('heldPercentInsiders') or 0) * 100
-            st.plotly_chart(go.Figure(data=[go.Pie(labels=['Promoters', 'Public'], values=[promo, 100-promo], hole=0.5)]).update_layout(template="plotly_dark"), use_container_width=True)
+            inst_total = (info.get('heldPercentInstitutions') or 0) * 100
+            
+            # FII/DII பிரிப்பு
+            fii = info.get('foreignInstitutionalHolders', inst_total * 0.6)
+            if fii > inst_total: fii = inst_total * 0.6
+            dii = inst_total - fii
+            public = max(0, 100 - (promo + inst_total))
+
+            fig_pie = go.Figure(data=[go.Pie(labels=['Promoters', 'FII', 'DII', 'Public'], values=[promo, fii, dii, public], hole=0.5, marker=dict(colors=['#58a6ff', '#f85149', '#39FF14', '#ffd700']))])
+            fig_pie.update_layout(height=400, template="plotly_dark")
+            st.plotly_chart(fig_pie, use_container_width=True)
+            
+            st.write(f"🔹 Promoters: **{promo:.2f}%** | 🔹 FII: **{fii:.2f}%**")
+            st.write(f"🔹 DII: **{dii:.2f}%** | 🔹 Public: **{public:.2f}%**")
         except: st.info("Shareholding data error.")
 
-    # Rating Tab
+    # --- Rating ---
+    with tabs[2]:
+        score = 80 if (info.get('trailingPE', 100) < 30) else 50
+        st.markdown(f'<div style="text-align:center; padding:30px; border:2px solid #39FF14; border-radius:15px;"><h1>Score: {score}/100</h1></div>', unsafe_allow_html=True)
+
+    # --- Actions ---
     with tabs[3]:
-        score = 80 if info.get('trailingPE', 100) < 30 else 50
-        st.markdown(f'<h1 style="text-align:center;">{score}/100</h1>', unsafe_allow_html=True)
+        try: st.dataframe(stock_obj.actions.tail(10).sort_index(ascending=False), use_container_width=True)
+        except: st.info("No actions found.")
 
-    # Actions Tab
+    # --- Watchlist ---
     with tabs[4]:
-        try: st.dataframe(stock_obj.actions.tail(10), use_container_width=True)
-        except: st.info("No actions.")
-
-    # Watchlist Tab
-    with tabs[5]:
         if st.button(f"➕ Add {u_input}"):
             if u_input not in st.session_state['watchlist']:
                 st.session_state['watchlist'].append(u_input)
                 st.rerun()
         for item in st.session_state['watchlist']:
-            c1, c2 = st.columns([5,1])
-            c1.info(item)
-            if c2.button("❌", key=item):
+            c1, c2 = st.columns([5, 1])
+            c1.info(f"📌 {item}")
+            if c2.button("❌", key=f"del_{item}"):
                 st.session_state['watchlist'].remove(item)
                 st.rerun()
 
