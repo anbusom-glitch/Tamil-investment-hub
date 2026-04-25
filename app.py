@@ -37,6 +37,12 @@ st.markdown("""
     .m-label { color: #8b949e; font-size: 10px; text-transform: uppercase; font-weight: 700; }
     .m-value { color: #ffffff; font-size: 16px; font-weight: 800; }
     .stExpander { background: rgba(57, 255, 20, 0.05) !important; border: 1px solid #39FF14 !important; border-radius: 12px !important; margin-top: 15px; }
+    
+    /* Fundamental Card Styling */
+    .f-card {
+        background: rgba(0, 209, 255, 0.05); border: 1px solid #00D1FF;
+        border-radius: 12px; padding: 15px; margin-top: 10px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -65,7 +71,7 @@ st.markdown(f"""
     """, unsafe_allow_html=True)
 
 # 5. சர்ச்
-u_input = st.text_input("Search Symbol (eg: TCS, RELIANCE)", value="TCS").upper().strip()
+u_input = st.text_input("Search Symbol (eg: TCS, RELIANCE)", value="RELIANCE").upper().strip()
 ticker = u_input if any(x in u_input for x in [".NS", ".BO"]) else f"{u_input}.NS"
 
 tabs = st.tabs([
@@ -80,27 +86,42 @@ tabs = st.tabs([
 try:
     stock_obj = yf.Ticker(ticker)
     info = stock_obj.info
-    hist = stock_obj.history(period="1y")
 
-    # --- Analysis Tab (About Us மீண்டும் சேர்க்கப்பட்டுள்ளது) ---
+    # --- Analysis Tab (Chart Removed, Fundamental Added) ---
     with tabs[0]:
         st.subheader(info.get('longName', ticker))
-        ltp = info.get('currentPrice') or info.get('regularMarketPrice') or (hist['Close'].iloc[-1] if not hist.empty else 0)
         
-        m_list = [
-            (get_text("Price", "விலை"), f"₹{ltp:,.2f}"),
-            (get_text("Sector", "துறை"), info.get('sector', 'N/A')),
-            (get_text("52W High", "52 வார உச்சம்"), f"₹{info.get('fiftyTwoWeekHigh', 0):,.2f}")
-        ]
-        for lbl, val in m_list:
-            st.markdown(f'<div class="metric-row"><span class="m-label">{lbl}</span><span class="m-value">{val}</span></div>', unsafe_allow_html=True)
-        
-        if not hist.empty:
-            fig = go.Figure(data=[go.Candlestick(x=hist.index[-60:], open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'])])
-            fig.update_layout(height=400, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=0,r=0,t=0,b=0))
-            st.plotly_chart(fig, use_container_width=True)
+        # தற்போதைய விலை (LTP)
+        ltp = info.get('currentPrice') or info.get('regularMarketPrice') or 0
+        st.markdown(f'<div class="metric-row"><span class="m-label">LTP (விலை)</span><span class="m-value">₹{ltp:,.2f}</span></div>', unsafe_allow_html=True)
 
-        # இதோ நீங்கள் கேட்ட "About Us" பகுதி
+        # 🚀 Fundamental Analysis Section
+        st.markdown(f"### {get_text('Fundamental Analysis', 'அடிப்படை பகுப்பாய்வு')}")
+        
+        # 2 காலம்களாகப் பிரித்து முக்கிய விபரங்களைக் காட்டுதல்
+        col1, col2 = st.columns(2)
+        
+        f_metrics_1 = [
+            (get_text("Market Cap", "சந்தை மதிப்பு"), f"₹{info.get('marketCap', 0)/10000000:,.0f} Cr"),
+            (get_text("P/E Ratio", "பி.இ விகிதம்"), info.get('trailingPE', 'N/A')),
+            (get_text("P/B Ratio", "பி.பி விகிதம்"), info.get('priceToBook', 'N/A')),
+            (get_text("ROE", "ஆர்.ஓ.இ"), f"{(info.get('returnOnEquity', 0)*100):.2f}%")
+        ]
+        
+        f_metrics_2 = [
+            (get_text("Debt to Equity", "கடனுக்கும் பங்கிற்கும் விகிதம்"), info.get('debtToEquity', 'N/A')),
+            (get_text("Div. Yield", "டிவிடெண்ட் ஈல்டு"), f"{(info.get('dividendYield', 0)*100):.2f}%"),
+            (get_text("Book Value", "புத்தக மதிப்பு"), f"₹{info.get('bookValue', 0):,.2f}"),
+            (get_text("Sector", "துறை"), info.get('sector', 'N/A'))
+        ]
+        
+        for lbl, val in f_metrics_1:
+            col1.markdown(f'<div class="metric-row"><span class="m-label">{lbl}</span><span class="m-value">{val}</span></div>', unsafe_allow_html=True)
+            
+        for lbl, val in f_metrics_2:
+            col2.markdown(f'<div class="metric-row"><span class="m-label">{lbl}</span><span class="m-value">{val}</span></div>', unsafe_allow_html=True)
+
+        # நிறுவன விளக்கம் (About Us)
         with st.expander(get_text("About Company ⬇️", "நிறுவனத்தைப் பற்றி ⬇️")):
             raw_about = info.get('longBusinessSummary', 'தகவல்கள் ஏதுமில்லை.')
             st.write(translate_text(raw_about, st.session_state['language']))
@@ -110,7 +131,7 @@ try:
         st.markdown(f"### {get_text('Shareholding Pattern', 'பங்குதாரர் விபரம்')}")
         promo = (info.get('heldPercentInsiders') or 0) * 100
         inst = (info.get('heldPercentInstitutions') or 0) * 100
-        fig_pie = go.Figure(data=[go.Pie(labels=['Promoters', 'Institutions', 'Public'], values=[promo, inst, 100-(promo+inst)], hole=0.5, marker=dict(colors=['#58a6ff', '#39FF14', '#ffd700']))])
+        fig_pie = go.Figure(data=[go.Pie(labels=['Promoters', 'Institutions', 'Public'], values=[promo, inst, 100-(promo+inst)], hole=0.5, marker=dict(colors=['#58a6ff', '#f85149', '#39FF14', '#ffd700']))])
         st.plotly_chart(fig_pie.update_layout(template="plotly_dark", height=400), use_container_width=True)
 
     # --- Financials Tab ---
