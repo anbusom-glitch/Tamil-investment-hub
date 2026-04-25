@@ -16,7 +16,6 @@ def translate_text(text, target_lang):
     if target_lang == "English":
         return text
     try:
-        # ஆங்கிலத்திலிருந்து தமிழிற்கு மொழிபெயர்க்க
         return GoogleTranslator(source='auto', target='ta').translate(text)
     except:
         return text
@@ -40,9 +39,16 @@ st.markdown("""
     }
     .m-label { color: #8b949e; font-size: 11px; font-weight: 700; text-transform: uppercase; }
     .m-value { color: #ffffff; font-size: 16px; font-weight: 800; }
-    .about-box {
-        background: rgba(57, 255, 20, 0.05); border: 1px solid #39FF14;
-        border-radius: 12px; padding: 20px; margin-top: 20px; line-height: 1.8; font-size: 15px;
+    
+    /* Expandable About Box Styling */
+    .stExpander {
+        background: rgba(57, 255, 20, 0.05) !important;
+        border: 1px solid #39FF14 !important;
+        border-radius: 12px !important;
+        margin-top: 15px !important;
+    }
+    .about-content {
+        line-height: 1.8; font-size: 15px; padding: 10px; color: #e6edf3;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -50,7 +56,6 @@ st.markdown("""
 # 3. மொழி மற்றும் தலைப்பு
 col_l1, col_l2 = st.columns([7, 3])
 with col_l2:
-    # மொழி தேர்வு பட்டன்
     lang_choice = st.radio("Language / மொழி", ["Tamil", "English"], horizontal=True, label_visibility="collapsed")
     st.session_state['language'] = lang_choice
 
@@ -81,8 +86,8 @@ try:
             # மெட்ரிக்ஸ்
             m_data = [
                 (get_text("Sector", "துறை"), info.get('sector', 'N/A')),
+                (get_text("LTP", "தற்போதைய விலை"), f"₹{info.get('currentPrice', 0):,.2f}"),
                 (get_text("52 Week High", "52 வார உச்சம்"), f"₹{info.get('fiftyTwoWeekHigh', 0):,.2f}"),
-                (get_text("52 Week Low", "52 வார வீழ்ச்சி"), f"₹{info.get('fiftyTwoWeekLow', 0):,.2f}"),
                 (get_text("P/B Ratio", "பி.பி விகிதம்"), f"{info.get('priceToBook', 'N/A')}")
             ]
             
@@ -91,13 +96,13 @@ try:
             
             st.plotly_chart(go.Figure(data=[go.Candlestick(x=hist.index[-60:], open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'])]).update_layout(height=400, template="plotly_dark", xaxis_rangeslider_visible=False), use_container_width=True)
             
-            # நிறுவனத்தைப் பற்றிய விளக்கம் (தானாக மாறும் மொழிபெயர்ப்பு)
-            st.markdown(f"### {get_text('About Company', 'நிறுவனத்தைப் பற்றி')}")
-            raw_summary = info.get('longBusinessSummary', 'No description available.')
-            
-            with st.spinner(get_text("Translating...", "மொழிபெயர்க்கிறேன்...")):
-                translated_summary = translate_text(raw_summary, st.session_state['language'])
-                st.markdown(f'<div class="about-box">{translated_summary}</div>', unsafe_allow_html=True)
+            # --- புதிய மாற்றப்பட்ட பகுதி: விரிவடையும் நிறுவன விளக்கம் ---
+            about_label = get_text("Click to read About Company ⬇️", "நிறுவனத்தைப் பற்றி படிக்க இங்கே தொடவும் ⬇️")
+            with st.expander(about_label):
+                raw_summary = info.get('longBusinessSummary', 'No description available.')
+                with st.spinner(get_text("Translating...", "மொழிபெயர்க்கிறேன்...")):
+                    translated_summary = translate_text(raw_summary, st.session_state['language'])
+                    st.markdown(f'<div class="about-content">{translated_summary}</div>', unsafe_allow_html=True)
 
         # --- பங்குதாரர் பகுதி (TAB 2) ---
         with tabs[1]:
@@ -111,8 +116,10 @@ try:
         # --- ரேட்டிங் பகுதி (TAB 3) ---
         with tabs[2]:
             score = 0
-            if 0 < info.get('trailingPE', 100) < 30: score += 50
-            if info.get('returnOnEquity', 0) > 0.15: score += 50
+            pe = info.get('trailingPE', 0)
+            roe = info.get('returnOnEquity', 0)
+            if 0 < pe < 30: score += 50
+            if roe > 0.15: score += 50
             color = "#39FF14" if score >= 50 else "#FF3131"
             st.markdown(f'<div style="text-align:center; padding:30px; border:2px solid {color}; border-radius:15px;"><h1>Score: {score}/100</h1></div>', unsafe_allow_html=True)
 
