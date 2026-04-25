@@ -44,50 +44,54 @@ def get_ticker_text():
         except: continue
     return text
 
-# 3. ஸ்டைலிங் (CSS) - Gradient Title & UI
+# 3. ஸ்டைலிங் (CSS) - Red Gradient Title & White Metrics
 st.markdown("""
     <style>
     [data-testid="stAppViewContainer"] { background-color: #0d1117; color: #c9d1d9; }
     
-    /* டிக்கர் ஸ்டைல் */
-    .ticker-wrap { width: 100%; overflow: hidden; background: #161b22; border-bottom: 1px solid #ffd700; padding: 10px 0; position: sticky; top: 0; z-index: 999; }
+    /* டிக்கர் */
+    .ticker-wrap { width: 100%; overflow: hidden; background: #161b22; border-bottom: 1px solid #f85149; padding: 10px 0; position: sticky; top: 0; z-index: 999; }
     .ticker-move { display: inline-block; white-space: nowrap; animation: ticker 40s linear infinite; font-weight: bold; }
     @keyframes ticker { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
     
-    /* தலைப்பு ஸ்டைல் - Double Shade Gradient */
-    .header-container { text-align: center; margin: 20px 0; }
+    /* தலைப்பு - Red & Green Gradient */
+    .header-container { text-align: center; margin: 15px 0; }
     .main-title { 
-        font-size: 38px !important; 
+        font-size: 32px !important; 
         font-weight: 900; 
         margin-bottom: 0px;
-        background: linear-gradient(90deg, #2ea043, #ffd700);
+        background: linear-gradient(90deg, #2ea043, #f85149);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
     }
-    .sub-title { font-size: 14px !important; color: #8b949e; font-style: italic; margin-top: -5px; }
+    .sub-title { font-size: 12px !important; color: #8b949e; font-style: italic; margin-top: -5px; }
     
-    /* மெட்ரிக்ஸ் */
-    .metric-row { background: #1c2128; border: 1px solid #30363d; border-radius: 10px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-    .m-label { color: #8b949e; font-size: 11px; text-transform: uppercase; }
-    .m-value { color: #ffd700; font-size: 15px; font-weight: bold; }
+    /* மெட்ரிக்ஸ் - White color & Small font */
+    .metric-row { 
+        background: #1c2128; 
+        border: 1px solid #30363d; 
+        border-radius: 8px; 
+        padding: 8px 12px; 
+        margin-bottom: 8px; 
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center; 
+    }
+    .m-label { color: #ffffff !important; font-size: 10px; text-transform: uppercase; font-weight: 500; }
+    .m-value { color: #ffffff !important; font-size: 13px; font-weight: bold; }
     
     /* நியூஸ் கார்டு */
-    .news-card { background: #161b22; border-radius: 8px; padding: 12px; margin-bottom: 10px; border-left: 4px solid #ffd700; }
+    .news-card { background: #161b22; border-radius: 8px; padding: 12px; margin-bottom: 10px; border-left: 4px solid #f85149; }
     </style>
     """, unsafe_allow_html=True)
 
 # 4. மேல் டிக்கர்
 st.markdown(f'<div class="ticker-wrap"><div class="ticker-move">{get_ticker_text()}</div></div>', unsafe_allow_html=True)
 
-# சைடுபார்
-with st.sidebar:
-    st.markdown("### ⚙️ Settings")
-    sel_lang = st.radio("Language / மொழி", ["Tamil", "English"], horizontal=True)
-
 # லோகோ மற்றும் தலைப்பு
 logo_b = get_base64_logo("logo.png")
 if logo_b:
-    st.markdown(f'<div style="text-align:center;"><img src="data:image/png;base64,{logo_b}" style="width:65px; border-radius:12px;"></div>', unsafe_allow_html=True)
+    st.markdown(f'<div style="text-align:center;"><img src="data:image/png;base64,{logo_b}" style="width:55px; border-radius:10px;"></div>', unsafe_allow_html=True)
 
 st.markdown(f"""
     <div class="header-container">
@@ -112,7 +116,7 @@ try:
 except:
     st.info("சரியான பங்கு குறியீட்டை உள்ளிடவும்...")
 
-# 6. டேப்கள் (Tabs) - Watchlist ஐகான் நீக்கப்பட்டது
+# 6. டேப்கள் (Tabs)
 if stock_loaded:
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "📊 Analysis", "📝 Overview", "🤝 Shareholding", 
@@ -129,8 +133,12 @@ if stock_loaded:
                 <div style="text-align:right;"><span class="m-label">P/E Ratio</span><br><span class="m-value">{info.get('trailingPE', 'N/A')}</span></div>
             </div>
             <div class="metric-row">
-                <div><span class="m-label">52W Low (தாழ்வு)</span><br><span class="m-value">₹{info.get('fiftyTwoWeekLow', 0):,.1f}</span></div>
-                <div style="text-align:right;"><span class="m-label">52W High (உயர்வு)</span><br><span class="m-value">₹{info.get('fiftyTwoWeekHigh', 0):,.1f}</span></div>
+                <div><span class="m-label">P/B Ratio</span><br><span class="m-value">{info.get('priceToBook', 'N/A')}</span></div>
+                <div style="text-align:right;"><span class="m-label">Market Cap (Cr)</span><br><span class="m-value">₹{info.get('marketCap', 0)//10**7:,.0f}</span></div>
+            </div>
+            <div class="metric-row">
+                <div><span class="m-label">52W Low</span><br><span class="m-value">₹{info.get('fiftyTwoWeekLow', 0):,.1f}</span></div>
+                <div style="text-align:right;"><span class="m-label">52W High</span><br><span class="m-value">₹{info.get('fiftyTwoWeekHigh', 0):,.1f}</span></div>
             </div>
         """, unsafe_allow_html=True)
 
@@ -143,39 +151,20 @@ if stock_loaded:
                 low=hist['Low'], close=hist['Close'],
                 increasing_line_color='#2ea043', decreasing_line_color='#f85149'
             )])
-            fig.update_layout(height=400, margin=dict(l=0,r=0,t=0,b=0), template="plotly_dark", xaxis_rangeslider_visible=False)
+            fig.update_layout(height=350, margin=dict(l=0,r=0,t=0,b=0), template="plotly_dark", xaxis_rangeslider_visible=False)
             st.plotly_chart(fig, use_container_width=True)
-
-    with tab2:
-        st.markdown("### 📝 Overview")
-        desc_en = info.get('longBusinessSummary', 'தகவல் இல்லை.')
-        if sel_lang == "Tamil":
-            st.write(translate_to_tamil(desc_en))
-        else:
-            st.write(desc_en)
 
     with tab3:
         st.markdown("### 🤝 Shareholding Pattern")
         insider = info.get('heldPercentInsiders', 0) * 100
         inst = info.get('heldPercentInstitutions', 0) * 100
+        # Chart அளவில் சிறிய மாற்றம் (Small style)
         fig_pie = go.Figure(data=[go.Pie(labels=['Promoters', 'Institutions', 'Others'], 
                                         values=[insider, inst, 100-(insider+inst)], 
-                                        hole=.5, marker=dict(colors=['#ffd700', '#58a6ff', '#2ea043']))])
+                                        hole=.6, 
+                                        marker=dict(colors=['#f85149', '#58a6ff', '#2ea043']))])
+        fig_pie.update_layout(height=300, width=300, margin=dict(l=20,r=20,t=20,b=20), showlegend=True)
         st.plotly_chart(fig_pie, use_container_width=True)
-
-    with tab4:
-        st.markdown("### 🔮 Forecast")
-        roe = info.get('returnOnEquity', 0)
-        if roe > 0.15: st.success("Strong Fundamentals 🚀")
-        else: st.warning("Neutral Outlook ⚖️")
-        st.write(f"ROE: {roe*100:.2f}%")
-
-    with tab5:
-        st.markdown("### 📅 Corporate Actions")
-        acts = stock_obj.actions.tail(10)
-        if not acts.empty:
-            st.write(acts)
-        else: st.write("நிகழ்வுகள் இல்லை.")
 
     with tab6:
         st.markdown("### 🗞️ News")
@@ -184,36 +173,25 @@ if stock_loaded:
             for n in news_data[:5]:
                 st.markdown(f"""
                     <div class="news-card">
-                        <a href="{n.get('link')}" target="_blank" style="color:#ffd700; text-decoration:none; font-weight:bold;">{n.get('title')}</a><br>
-                        <small style="color:#8b949e;">{n.get('publisher')}</small>
+                        <a href="{n.get('link')}" target="_blank" style="color:#f85149; text-decoration:none; font-weight:bold; font-size:14px;">{n.get('title')}</a>
                     </div>
                 """, unsafe_allow_html=True)
 
     with tab7:
-        st.markdown("### My Watchlist")
-        
-        # ஆட் பட்டன்
-        if st.button(f"➕ Add {u_input} to Watchlist"):
+        st.markdown("### Watchlist")
+        if st.button(f"➕ Add {u_input}"):
             if u_input not in st.session_state['watchlist']:
                 st.session_state['watchlist'].append(u_input)
                 st.rerun()
-
         st.divider()
-
-        # ரிமூவ் பட்டனுடன் கூடிய பட்டியல்
-        if st.session_state['watchlist']:
-            for item in st.session_state['watchlist']:
-                col_w1, col_w2 = st.columns([4, 1])
-                with col_w1:
-                    st.markdown(f"**{item}**")
-                with col_w2:
-                    if st.button("Remove", key=f"del_{item}"):
-                        st.session_state['watchlist'].remove(item)
-                        st.rerun()
-        else:
-            st.info("வாட்ச்லிஸ்ட் காலியாக உள்ளது.")
+        for item in st.session_state['watchlist']:
+            c1, c2 = st.columns([4, 1])
+            c1.write(item)
+            if c2.button("Remove", key=f"del_{item}"):
+                st.session_state['watchlist'].remove(item)
+                st.rerun()
 
 else:
-    st.info("காத்திருக்கவும்... தரவுகள் லோடு ஆகின்றன.")
+    st.info("தரவுகள் லோடு ஆகின்றன...")
 
-st.markdown("<div style='text-align:center;color:#333;font-size:10px;margin-top:50px;'>© 2026 TAMIL INVEST HUB</div>", unsafe_allow_html=True)
+st.markdown("<div style='text-align:center;color:#333;font-size:10px;margin-top:40px;'>© 2026 TAMIL INVEST HUB</div>", unsafe_allow_html=True)
