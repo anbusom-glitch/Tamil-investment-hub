@@ -20,7 +20,7 @@ def get_base64_logo(bin_file):
         return base64.b64encode(data).decode()
     except: return None
 
-# தமிழ் மொழிபெயர்ப்பு
+# உறுதியான தமிழ் மொழிபெயர்ப்பு
 def translate_to_tamil(text):
     if not text or len(text) < 5: return "தகவல் இல்லை."
     try:
@@ -55,11 +55,11 @@ def get_ticker_text():
         except: continue
     return t_text
 
-# 3. வடிவமைப்பு (CSS - பச்சை-சிவப்பு தலைப்பு & வெள்ளை எழுத்துக்கள்)
+# 3. CSS (பச்சை-சிவப்பு தலைப்பு, வெள்ளை எழுத்துக்கள் & பெரிய அளவு)
 st.markdown("""
     <style>
     html, body, [class*="css"] { 
-        font-size: 13.5px !important; /* எழுத்துரு அளவு அதிகரிப்பு */
+        font-size: 13.5px !important; 
         background-color: #0d1117; 
         color: #ffffff; 
     }
@@ -67,7 +67,6 @@ st.markdown("""
     .ticker-move { display: inline-block; white-space: nowrap; animation: ticker 35s linear infinite; font-weight: bold; }
     @keyframes ticker { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
     
-    /* பச்சை மற்றும் சிவப்பு கலந்த தலைப்பு */
     .header-text { 
         background: linear-gradient(90deg, #2ea043, #f85149); 
         -webkit-background-clip: text; 
@@ -103,13 +102,14 @@ st.markdown("""
 
 st.markdown(f'<div class="ticker-wrap"><div class="ticker-move">{get_ticker_text()}</div></div>', unsafe_allow_html=True)
 
+# முகப்புப் பக்க மொழித் தேர்வு
 sel_lang = st.radio("Choose Language / மொழி", ["Tamil", "English"], horizontal=True)
 
 logo_b = get_base64_logo("logo.png")
 if logo_b:
     st.markdown(f'<div style="text-align:center;"><img src="data:image/png;base64,{logo_b}" style="width:50px; border-radius:10px;"></div>', unsafe_allow_html=True)
 
-# தலைப்பு மற்றும் Created By
+# தலைப்பு மற்றும் உருவாக்கியவர்
 st.markdown('<p class="header-text">TAMIL INVEST HUB</p>', unsafe_allow_html=True)
 st.markdown('<p class="created-by">created by somasundaram</p>', unsafe_allow_html=True)
 
@@ -120,6 +120,7 @@ ticker = get_clean_ticker(u_input)
 # தரவு சேகரிப்பு
 stock_loaded = False
 info = {}
+stock_obj = None
 
 try:
     with st.spinner('Loading...'):
@@ -128,7 +129,7 @@ try:
         if 'longName' in info:
             stock_loaded = True
 except:
-    st.info("Loading Data...")
+    pass
 
 # 5. TABS
 if stock_loaded:
@@ -140,7 +141,6 @@ if stock_loaded:
     with tab1:
         st.markdown(f"### {info.get('longName', ticker)}")
         
-        # Watchlist Add Button
         if st.button(f"⭐ Add {u_input} to Watchlist"):
             if u_input not in st.session_state['watchlist']:
                 st.session_state['watchlist'].append(u_input)
@@ -185,7 +185,6 @@ if stock_loaded:
             p_v = info.get('heldPercentInsiders', 0.5) * 100
             inst_v = info.get('heldPercentInstitutions', 0.3) * 100
             fig_p = go.Figure(data=[go.Pie(labels=['Promoters', 'Institutions', 'Others'], values=[p_v, inst_v, 100-(p_v+inst_v)], hole=.5, marker=dict(colors=['#ffd700', '#58a6ff', '#2ea043']))])
-            # பை-சார்ட் அளவு சிறியதாக்கப்பட்டுள்ளது
             fig_p.update_layout(height=240, margin=dict(l=0,r=0,t=10,b=10), legend=dict(orientation="h", y=-0.2))
             st.plotly_chart(fig_p, use_container_width=True)
         except: st.write("தகவல் இல்லை.")
@@ -193,22 +192,48 @@ if stock_loaded:
     with tab4:
         st.markdown("### 🔮 Forecast")
         roe = info.get('returnOnEquity', 0)
-        if roe > 0.15: 
-            st.success("Strong Fundamental 🚀")
-        else: 
-            st.warning("Neutral Outlook ⚖️")
+        if roe > 0.15: st.success("Strong Fundamental 🚀")
+        else: st.warning("Neutral Outlook ⚖️")
         st.write(f"ROE: {roe*100:.2f}%")
 
     with tab5:
         st.markdown("### 📅 Action (Dividends)")
-        acts = stock_obj.actions.tail(10).sort_index(ascending=False)
-        if not acts.empty:
-            for date, row in acts.iterrows():
-                if row.get('Dividends', 0) > 0: st.info(f"📅 {date.strftime('%d %b %Y')} - Dividend: ₹{row.get('Dividends')}")
-        else: st.write("தகவல் இல்லை.")
+        try:
+            acts = stock_obj.actions.tail(10).sort_index(ascending=False)
+            if not acts.empty:
+                for date, row in acts.iterrows():
+                    if row.get('Dividends', 0) > 0: st.info(f"📅 {date.strftime('%d %b %Y')} - Dividend: ₹{row.get('Dividends')}")
+            else: st.write("தகவல் இல்லை.")
+        except: st.write("நிகழ்வுகளைப் பெறுவதில் பிழை.")
 
     with tab6:
         st.markdown("### 🗞️ News")
         try:
             for n in stock_obj.news[:10]:
                 ts = n.get('providerPublishTime', 0)
+                dt_s = datetime.fromtimestamp(ts).strftime('%d %b, %H:%M') if ts else "சமீபத்தில்"
+                st.markdown(f'<div class="news-card"><a href="{n.get("link","#")}" target="_blank" class="news-title">{n.get("title","News")}</a><br><small>{n.get("publisher","Market")} • {dt_s}</small></div>', unsafe_allow_html=True)
+        except:
+            st.write("செய்திகள் இல்லை.")
+
+    with tab7:
+        st.markdown("### 👀 My Watchlist")
+        if st.session_state['watchlist']:
+            for item in st.session_state['watchlist']:
+                col_name, col_del = st.columns([4, 1])
+                col_name.markdown(f"📈 **{item}**")
+                if col_del.button("Delete 🗑️", key=f"del_{item}"):
+                    st.session_state['watchlist'].remove(item)
+                    st.rerun()
+        else:
+            st.info("வாட்ச்லிஸ்ட் காலியாக உள்ளது.")
+
+    with tab8:
+        st.markdown("### 💼 Broker")
+        st.button("🔗 Connect Zerodha", use_container_width=True)
+        st.button("🔗 Connect Angel One", use_container_width=True)
+
+else:
+    st.info("Loading Data...")
+
+st.markdown("<div style='text-align:center;color:#333;font-size:10px;margin-top:30px;'>© 2026 TAMIL INVEST HUB</div>", unsafe_allow_html=True)
