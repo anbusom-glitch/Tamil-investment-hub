@@ -28,20 +28,21 @@ def translate_to_tamil(text):
     except:
         return text
 
-# ஸ்மார்ட் சர்ச்
+# ஸ்மார்ட் சர்ச் (பெயர்களைக் குறியீடாக மாற்றுதல்)
 def get_clean_ticker(user_val):
     mapping = {
         "RELIANCE": "RELIANCE.NS", "SBI": "SBIN.NS", "SBIN": "SBIN.NS",
-        "COAL INDIA": "COALINDIA.NS", "TCS": "TCS.NS", "ITC": "ITC.NS",
-        "HDFC": "HDFCBANK.NS", "INFOSYS": "INFY.NS",
-        "ADANI": "ADANIENT.NS", "TATA MOTORS": "TATAMOTORS.NS"
+        "COAL INDIA": "COALINDIA.NS", "COALINDIA": "COALINDIA.NS",
+        "TCS": "TCS.NS", "ITC": "ITC.NS", "HDFC": "HDFCBANK.NS", 
+        "INFOSYS": "INFY.NS", "INFY": "INFY.NS",
+        "ADANI": "ADANIENT.NS", "TATA MOTORS": "TATAMOTORS.NS", "TATAMOTORS": "TATAMOTORS.NS"
     }
     val = user_val.strip().upper()
     if val in mapping: return mapping[val]
     if ".NS" not in val and ".BO" not in val: return f"{val}.NS"
     return val
 
-# 2. லைவ் டிக்கர்
+# 2. லைவ் டிக்கர் (வெள்ளை நிற எழுத்துக்கள்)
 def get_ticker_text():
     indices = ["^NSEI", "^BSESN", "RELIANCE.NS", "SBIN.NS", "TCS.NS"]
     t_text = ""
@@ -55,7 +56,7 @@ def get_ticker_text():
         except: continue
     return t_text
 
-# 3. CSS
+# 3. CSS (பச்சை-சிவப்பு தலைப்பு, வெள்ளை எழுத்துக்கள் & பெரிய அளவு)
 st.markdown("""
     <style>
     html, body, [class*="css"] { 
@@ -77,19 +78,19 @@ st.markdown("""
         margin-bottom: 5px; 
     }
     .created-by { 
-        font-size: 11px !important; 
+        font-size: 11.5px !important; 
         color: #8b949e; 
         text-align: center; 
         margin-top: -8px; 
         margin-bottom: 20px; 
     }
     
-    .metric-row { background: #1c2128; border: 1px solid #30363d; border-radius: 10px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
-    .m-label { color: #8b949e; font-size: 10.5px !important; text-transform: uppercase; }
-    .m-value { color: #ffffff !important; font-size: 17px !important; font-weight: bold; }
+    .metric-row { background: #1c2128; border: 1px solid #30363d; border-radius: 10px; padding: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+    .m-label { color: #8b949e; font-size: 11px !important; text-transform: uppercase; }
+    .m-value { color: #ffffff !important; font-size: 18px !important; font-weight: bold; }
     
     .news-card { background: #161b22; border-radius: 8px; padding: 12px; margin-bottom: 10px; border-left: 4px solid #ffffff; }
-    .news-title { color: #ffffff !important; font-size: 14.5px !important; font-weight: bold; text-decoration: none; }
+    .news-title { color: #ffffff !important; font-size: 15px !important; font-weight: bold; text-decoration: none; }
     
     .stTabs [data-baseweb="tab"] {
         font-size: 12px !important;
@@ -113,20 +114,25 @@ st.markdown('<p class="created-by">created by somasundaram</p>', unsafe_allow_ht
 u_input = st.text_input("பங்கின் பெயர் (eg: Reliance, SBI, Coal India)", value="SBI").upper()
 ticker = get_clean_ticker(u_input)
 
+# மேம்படுத்தப்பட்ட டேட்டா லோடிங் (Error Handling)
 stock_loaded = False
 info = {}
 stock_obj = None
 
-try:
-    with st.spinner('Loading...'):
-        stock_obj = yf.Ticker(ticker)
-        info = stock_obj.info
-        if 'longName' in info:
-            stock_loaded = True
-except:
-    pass
+if u_input:
+    try:
+        with st.spinner('தரவுகளைத் திரட்டுகிறேன்...'):
+            stock_obj = yf.Ticker(ticker)
+            # info எடுக்கும்போது 5 வினாடிகளுக்கு மேல் ஆனால் எரர் காட்டும்படி அமைக்கப்பட்டுள்ளது
+            info = stock_obj.info
+            if info and 'longName' in info:
+                stock_loaded = True
+            else:
+                st.warning(f"'{u_input}' பற்றிய தகவல்கள் Yahoo Finance-ல் இல்லை. சரியான பெயரை உள்ளிடவும்.")
+    except Exception as e:
+        st.error(f"மன்னிக்கவும், தரவுகளைப் பெறுவதில் சிக்கல் உள்ளது. சிறிது நேரம் கழித்து முயலவும்.")
 
-# 5. TABS (வாட்ச்லிஸ்டில் கண் ஐகான் நீக்கப்பட்டது)
+# 5. TABS
 if stock_loaded:
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
         "📊 Analysis", "📝 Overview", "🤝 Shareholding", 
@@ -136,7 +142,6 @@ if stock_loaded:
     with tab1:
         st.markdown(f"### {info.get('longName', ticker)}")
         
-        # --- ADD BUTTON ---
         if st.button(f"Add {u_input} to Watchlist"):
             if u_input not in st.session_state['watchlist']:
                 st.session_state['watchlist'].append(u_input)
@@ -164,7 +169,7 @@ if stock_loaded:
         if not hist.empty:
             fig = go.Figure(data=[go.Candlestick(x=hist.index, open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'],
                                                 increasing_line_color='#2ea043', decreasing_line_color='#f85149')])
-            fig.update_layout(height=380, margin=dict(l=0,r=0,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', xaxis_rangeslider_visible=False)
+            fig.update_layout(height=400, margin=dict(l=0,r=0,t=0,b=0), paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', xaxis_rangeslider_visible=False)
             st.plotly_chart(fig, use_container_width=True)
 
     with tab2:
@@ -200,7 +205,7 @@ if stock_loaded:
                 for date, row in acts.iterrows():
                     if row.get('Dividends', 0) > 0: st.info(f"📅 {date.strftime('%d %b %Y')} - Dividend: ₹{row.get('Dividends')}")
             else: st.write("தகவல் இல்லை.")
-        except: pass
+        except: st.write("தரவு இல்லை.")
 
     with tab6:
         st.markdown("### 🗞️ News")
@@ -209,7 +214,7 @@ if stock_loaded:
                 ts = n.get('providerPublishTime', 0)
                 dt_s = datetime.fromtimestamp(ts).strftime('%d %b, %H:%M') if ts else "சமீபத்தில்"
                 st.markdown(f'<div class="news-card"><a href="{n.get("link","#")}" target="_blank" class="news-title">{n.get("title","News")}</a><br><small>{n.get("publisher","Market")} • {dt_s}</small></div>', unsafe_allow_html=True)
-        except: pass
+        except: st.write("செய்திகள் இல்லை.")
 
     with tab7:
         st.markdown("### My Watchlist")
@@ -217,7 +222,6 @@ if stock_loaded:
             for item in st.session_state['watchlist']:
                 col_name, col_del = st.columns([4, 1])
                 col_name.markdown(f"📈 **{item}**")
-                # --- REMOVE BUTTON ---
                 if col_del.button("Delete 🗑️", key=f"del_{item}"):
                     st.session_state['watchlist'].remove(item)
                     st.rerun()
@@ -225,11 +229,8 @@ if stock_loaded:
             st.info("வாட்ச்லிஸ்ட் காலியாக உள்ளது.")
 
     with tab8:
-        st.markdown("### 💼 Broker Connect")
+        st.markdown("### 💼 Broker")
         st.button("🔗 Connect Zerodha", use_container_width=True)
         st.button("🔗 Connect Angel One", use_container_width=True)
-
-else:
-    st.info("Loading Data...")
 
 st.markdown("<div style='text-align:center;color:#333;font-size:10px;margin-top:30px;'>© 2026 TAMIL INVEST HUB</div>", unsafe_allow_html=True)
