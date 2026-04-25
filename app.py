@@ -20,35 +20,33 @@ def translate_to_tamil(text):
         return GoogleTranslator(source='en', target='ta').translate(str(text)[:1000])
     except: return str(text)
 
-# 2. பிரீமியம் CSS (Font Big & Bright UI)
+# 2. மேம்படுத்தப்பட்ட CSS (Big Font & Normal Round Style)
 st.markdown("""
     <style>
     /* எழுத்து அளவை அதிகரித்துள்ளேன் */
-    html, body, [class*="css"] { font-size: 14px !important; background-color: #0d1117; color: #ffffff; }
+    html, body, [class*="css"] { font-size: 15px !important; background-color: #0d1117; color: #ffffff; }
     
     .ticker-wrap { width: 100%; overflow: hidden; background: #161b22; border-bottom: 2px solid #39FF14; padding: 12px 0; position: sticky; top: 0; z-index: 999; }
-    .ticker-move { display: inline-block; white-space: nowrap; animation: ticker 40s linear infinite; font-size: 13px; font-weight: bold; }
+    .ticker-move { display: inline-block; white-space: nowrap; animation: ticker 40s linear infinite; font-size: 14px; font-weight: bold; }
     @keyframes ticker { 0% { transform: translateX(100%); } 100% { transform: translateX(-100%); } }
     
-    /* பிரகாசமான மற்றும் பெரிய தலைப்பு */
     .header-container { text-align: center; margin: 20px 0; }
     .main-title { 
-        font-size: 42px !important; 
+        font-size: 45px !important; 
         font-weight: 950; 
         background: linear-gradient(90deg, #39FF14, #FF3131);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        text-shadow: 0px 0px 20px rgba(57, 255, 20, 0.5);
+        text-shadow: 0px 0px 15px rgba(57, 255, 20, 0.4);
         margin-bottom: 0px;
     }
-    .sub-title { font-size: 14px !important; color: #8b949e; font-style: italic; margin-top: -5px; }
+    .sub-title { font-size: 15px !important; color: #8b949e; font-style: italic; margin-top: -5px; }
     
-    /* மெட்ரிக்ஸ் - Clear & White */
-    .metric-row { background: #1c2128; border: 1px solid #30363d; border-radius: 10px; padding: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; }
-    .m-label { color: #ffffff !important; font-size: 11px; text-transform: uppercase; opacity: 0.8; }
-    .m-value { color: #ffffff !important; font-size: 16px; font-weight: bold; }
+    .metric-row { background: #1c2128; border: 1px solid #30363d; border-radius: 10px; padding: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; }
+    .m-label { color: #ffffff !important; font-size: 12px; text-transform: uppercase; opacity: 0.8; }
+    .m-value { color: #ffffff !important; font-size: 18px; font-weight: bold; }
     
-    /* நியூஸ் கார்டு - KeyError தவிர்க்க பாதுகாப்பு */
+    /* பிழையற்ற நியூஸ் கார்டு */
     .news-card { background: #161b22; border-radius: 8px; padding: 15px; margin-bottom: 10px; border-left: 5px solid #39FF14; }
     
     [data-testid="stHeader"] { height: 0px; }
@@ -71,7 +69,6 @@ def get_ticker_text():
 
 st.markdown(f'<div class="ticker-wrap"><div class="ticker-move">{get_ticker_text()}</div></div>', unsafe_allow_html=True)
 
-# பிராண்ட் ஹெடர்
 st.markdown(f"""
     <div class="header-container">
         <p class="main-title">TAMIL INVEST HUB</p>
@@ -102,40 +99,54 @@ except:
 # TAB 1: ANALYSIS
 with tab1:
     if stock_loaded:
-        st.markdown(f"<p style='font-size:18px; font-weight:bold;'>{info.get('longName')}</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='font-size:20px; font-weight:bold;'>{info.get('longName', 'N/A')}</p>", unsafe_allow_html=True)
         ltp = info.get('currentPrice') or info.get('regularMarketPrice') or 0
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown(f'<div class="metric-row"><div><span class="m-label">LTP</span><br><span class="m-value">₹{ltp:,.2f}</span></div></div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="metric-row"><div><span class="m-label">P/E RATIO</span><br><span class="m-value">{info.get("trailingPE", "N/A")}</span></div></div>', unsafe_allow_html=True)
-        with col2:
-            st.markdown(f'<div class="metric-row"><div><span class="m-label">MARKET CAP</span><br><span class="m-value">₹{info.get("marketCap", 0)//10**7:,.0f} Cr</span></div></div>', unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown(f'<div class="metric-row"><div><span class="m-label">LTP (விலை)</span><br><span class="m-value">₹{ltp:,.2f}</span></div></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-row"><div><span class="m-label">P/E Ratio</span><br><span class="m-value">{info.get("trailingPE", "N/A")}</span></div></div>', unsafe_allow_html=True)
+        with c2:
+            st.markdown(f'<div class="metric-row"><div><span class="m-label">Market Cap</span><br><span class="m-value">₹{info.get("marketCap", 0)//10**7:,.0f} Cr</span></div></div>', unsafe_allow_html=True)
             st.markdown(f'<div class="metric-row"><div><span class="m-label">ROE</span><br><span class="m-value">{info.get("returnOnEquity", 0)*100:.2f}%</span></div></div>', unsafe_allow_html=True)
         
         fig = go.Figure(data=[go.Candlestick(x=hist.index[-60:], open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'])])
-        fig.update_layout(height=400, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=0,r=0,t=0,b=0))
+        fig.update_layout(height=450, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=0,r=0,t=0,b=0))
         st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Loading Stock Data...")
 
-# TAB 5: NEWS (KeyError சரிசெய்யப்பட்டுள்ளது)
+# TAB 2: RATINGS (Normal Round Chart)
+with tab2:
+    if stock_loaded:
+        st.markdown("### Shareholding Pattern (Normal Round)")
+        promo = info.get('heldPercentInsiders', 0) * 100
+        inst = info.get('heldPercentInstitutions', 0) * 100
+        public = 100 - (promo + inst)
+        
+        labels = ['Promoters', 'Institutions', 'Public']
+        values = [promo, inst, max(0, public)]
+        
+        # 3D நீக்கப்பட்டு சாதாரண ரவுண்ட் வடிவம்
+        fig_pie = go.Figure(data=[go.Pie(labels=labels, values=values, hole=0.5)]) 
+        fig_pie.update_layout(height=400, template="plotly_dark", showlegend=True)
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+# TAB 5: NEWS (KeyError Fix)
 with tab5:
     if stock_loaded:
-        news_list = stock_obj.news
-        if news_list:
-            for n in news_list[:5]:
-                # .get() பயன்படுத்துவதன் மூலம் KeyError தவிர்க்கப்படும்
-                title = n.get('title', 'No Title')
-                link = n.get('link', '#')
-                publisher = n.get('publisher', 'Unknown')
-                st.markdown(f"""
-                    <div class="news-card">
-                        <a href="{link}" target="_blank" style="color:#39FF14; font-weight:bold; font-size:16px; text-decoration:none;">{title}</a><br>
-                        <small style="color:#8b949e;">ஆதாரம்: {publisher}</small>
-                    </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.write("செய்திகள் ஏதுமில்லை.")
+        try:
+            news_list = stock_obj.news
+            if news_list:
+                for n in news_list[:5]:
+                    title = n.get('title', 'No Title Available')
+                    link = n.get('link', '#')
+                    pub = n.get('publisher', 'Market News')
+                    st.markdown(f"""
+                        <div class="news-card">
+                            <a href="{link}" target="_blank" style="color:#39FF14; font-weight:bold; font-size:17px; text-decoration:none;">{title}</a><br>
+                            <small style="color:#8b949e;">{pub}</small>
+                        </div>
+                    """, unsafe_allow_html=True)
+            else: st.write("செய்திகள் இல்லை.")
+        except: st.error("செய்திகளைப் பெறுவதில் பிழை.")
 
 # TAB 6: WATCHLIST
 with tab6:
@@ -148,9 +159,9 @@ with tab6:
     st.divider()
     for item in st.session_state['watchlist']:
         cw1, cw2 = st.columns([5, 1])
-        cw1.write(f"📌 {item}")
+        cw1.write(f"**📌 {item}**")
         if cw2.button("Remove", key=f"del_{item}"):
             st.session_state['watchlist'].remove(item)
             st.rerun()
 
-# மற்ற டேப்கள் (Ratings, Forecast, Action) - சுருக்கத்திற்காக விடுபட்டுள்ளது, ஆனால் உங்கள் பழைய கோடில் உள்ளது போலவே தொடரலாம்.
+st.markdown("<div style='text-align:center;color:#444;font-size:12px;margin-top:30px;'>© 2026 TAMIL INVEST HUB PRO</div>", unsafe_allow_html=True)
