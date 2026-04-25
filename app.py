@@ -11,6 +11,14 @@ if 'is_logged_in' not in st.session_state: st.session_state['is_logged_in'] = Fa
 if 'watchlist' not in st.session_state: st.session_state['watchlist'] = []
 if 'language' not in st.session_state: st.session_state['language'] = "Tamil"
 
+# மொழிபெயர்ப்பு உதவியாளர்
+@st.cache_data(show_spinner=False)
+def translate_text(text, target_lang):
+    if not text or target_lang == "English": return text
+    try:
+        return GoogleTranslator(source='auto', target='ta').translate(text)
+    except: return text
+
 def get_text(en, ta):
     return ta if st.session_state['language'] == "Tamil" else en
 
@@ -28,6 +36,7 @@ st.markdown("""
     .metric-row { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 12px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
     .m-label { color: #8b949e; font-size: 10px; text-transform: uppercase; font-weight: 700; }
     .m-value { color: #ffffff; font-size: 16px; font-weight: 800; }
+    .stExpander { background: rgba(57, 255, 20, 0.05) !important; border: 1px solid #39FF14 !important; border-radius: 12px !important; margin-top: 15px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -67,16 +76,17 @@ tabs = st.tabs([
     f"📌 {get_text('Watchlist', 'வாட்ச்லிஸ்ட்')}"
 ])
 
-# 6. தரவு கையாளுதல் (Safe Loading)
+# 6. தரவு கையாளுதல்
 try:
     stock_obj = yf.Ticker(ticker)
     info = stock_obj.info
     hist = stock_obj.history(period="1y")
 
-    # --- Analysis Tab ---
+    # --- Analysis Tab (About Us மீண்டும் சேர்க்கப்பட்டுள்ளது) ---
     with tabs[0]:
         st.subheader(info.get('longName', ticker))
         ltp = info.get('currentPrice') or info.get('regularMarketPrice') or (hist['Close'].iloc[-1] if not hist.empty else 0)
+        
         m_list = [
             (get_text("Price", "விலை"), f"₹{ltp:,.2f}"),
             (get_text("Sector", "துறை"), info.get('sector', 'N/A')),
@@ -90,6 +100,11 @@ try:
             fig.update_layout(height=400, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=0,r=0,t=0,b=0))
             st.plotly_chart(fig, use_container_width=True)
 
+        # இதோ நீங்கள் கேட்ட "About Us" பகுதி
+        with st.expander(get_text("About Company ⬇️", "நிறுவனத்தைப் பற்றி ⬇️")):
+            raw_about = info.get('longBusinessSummary', 'தகவல்கள் ஏதுமில்லை.')
+            st.write(translate_text(raw_about, st.session_state['language']))
+
     # --- Shareholding Tab ---
     with tabs[1]:
         st.markdown(f"### {get_text('Shareholding Pattern', 'பங்குதாரர் விபரம்')}")
@@ -98,40 +113,30 @@ try:
         fig_pie = go.Figure(data=[go.Pie(labels=['Promoters', 'Institutions', 'Public'], values=[promo, inst, 100-(promo+inst)], hole=0.5, marker=dict(colors=['#58a6ff', '#39FF14', '#ffd700']))])
         st.plotly_chart(fig_pie.update_layout(template="plotly_dark", height=400), use_container_width=True)
 
-    # --- Financials Tab (Protected against KeyErrors) ---
+    # --- Financials Tab ---
     with tabs[2]:
         st.markdown(f"### {get_text('Financial Statement', 'நிதிநிலை அறிக்கை')}")
         period = st.selectbox(get_text("Select Period", "காலம்"), ["Annual", "Quarterly"])
-        
         try:
             fin_data = stock_obj.financials if period == "Annual" else stock_obj.quarterly_financials
             if not fin_data.empty:
-                # சாத்தியமான பெயர்களைத் தேடுதல்
                 rev_idx = [i for i in fin_data.index if 'Revenue' in i or 'Sales' in i]
                 prof_idx = [i for i in fin_data.index if 'Net Income' in i or 'Profit' in i]
-                
                 if rev_idx and prof_idx:
                     rev_values = fin_data.loc[rev_idx[0]]
                     prof_values = fin_data.loc[prof_idx[0]]
-                    
                     fig_fin = go.Figure()
                     fig_fin.add_trace(go.Bar(x=rev_values.index, y=rev_values.values, name=get_text('Revenue', 'வருவாய்'), marker_color='#00D1FF'))
                     fig_fin.add_trace(go.Scatter(x=prof_values.index, y=prof_values.values, name=get_text('Net Profit', 'நிகர லாபம்'), line=dict(color='#39FF14', width=4)))
                     fig_fin.update_layout(template="plotly_dark", height=400)
                     st.plotly_chart(fig_fin, use_container_width=True)
-                
-                st.markdown(f"#### {get_text('Data Table', 'தரவு அட்டவணை')}")
                 st.dataframe(fin_data.head(10), use_container_width=True)
-            else:
-                st.info("Financial data not available.")
-        except:
-            st.info("காலாண்டு தரவுகள் தற்போது கிடைக்கவில்லை.")
+        except: st.info("Financial details not available.")
 
     # --- Rating Tab ---
     with tabs[3]:
-        score = 85 if (info.get('trailingPE', 100) < 30) else 55
-        color = "#39FF14" if score > 70 else "#FF3131"
-        st.markdown(f'<div style="text-align:center; padding:40px; border:2px solid {color}; border-radius:15px;"><h1>{score}/100</h1></div>', unsafe_allow_html=True)
+        score = 80 if info.get('trailingPE', 100) < 30 else 50
+        st.markdown(f'<div style="text-align:center; padding:40px; border:2px solid #39FF14; border-radius:15px;"><h1>{score}/100</h1></div>', unsafe_allow_html=True)
 
     # --- Watchlist Tab ---
     with tabs[4]:
@@ -146,7 +151,7 @@ try:
                 st.session_state['watchlist'].remove(item)
                 st.rerun()
 
-except Exception as e:
-    st.error("சரியான பங்கு குறியீட்டை (Symbol) உள்ளிடவும்.")
+except:
+    st.error("சரியான பங்கு குறியீட்டை உள்ளிடவும்.")
 
 st.markdown("<p style='text-align:center; color:#444; margin-top:50px;'>© 2026 TAMIL INVEST HUB PRO | created by somasundaram</p>", unsafe_allow_html=True)
