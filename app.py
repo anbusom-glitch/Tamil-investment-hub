@@ -95,11 +95,13 @@ if not st.session_state['is_logged_in']:
         u = st.text_input("User ID", value="admin")
         p = st.text_input("Password", type="password", value="1234")
         if st.button("🚀 Access Hub", use_container_width=True):
-            if u == "admin" and p == "1234":
+            # Any non-empty user ID and password is accepted
+            if u.strip() and p.strip():
                 st.session_state['is_logged_in'] = True
+                st.session_state['username'] = u.strip()
                 st.rerun()
             else:
-                st.error("Invalid credentials")
+                st.error("User ID மற்றும் Password உள்ளிடவும்")
         st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
@@ -229,14 +231,18 @@ def safe(val, decimals=2):
 @st.cache_data(ttl=300, show_spinner=False)
 def fetch_data(sym, period):
     stock = yf.Ticker(sym)
-    info = stock.info
+    info = dict(stock.info)           # plain dict — serializable
     hist = stock.history(period=period)
-    actions = stock.actions
-    return stock, info, hist, actions
+    try:
+        actions = stock.actions
+    except Exception:
+        actions = pd.DataFrame()
+    return info, hist, actions
 
 try:
     with st.spinner("Fetching market data..."):
-        stock, info, hist, actions = fetch_data(ticker_symbol, period)
+        info, hist, actions = fetch_data(ticker_symbol, period)
+        stock = yf.Ticker(ticker_symbol)   # non-cached, used only for sidebar portfolio LTP
 
     if hist.empty:
         st.error("⚠️ No data found. Please check the symbol and try again.")
