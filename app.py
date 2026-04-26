@@ -324,7 +324,7 @@ try:
         fig.add_trace(go.Candlestick(
             x=hist.index, open=hist['Open'], high=hist['High'], low=hist['Low'], close=hist['Close'],
             increasing_line_color='#39FF14', decreasing_line_color='#FF4444',
-            increasing_fillcolor='#39FF1488', decreasing_fillcolor='#FF444488',
+            increasing_fillcolor='rgba(57,255,20,0.5)', decreasing_fillcolor='rgba(255,68,68,0.5)',
             name="Price"
         ), row=1, col=1)
 
