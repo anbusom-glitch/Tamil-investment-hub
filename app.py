@@ -1,13 +1,13 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import numpy as np
 import plotly.graph_objects as go
 from deep_translator import GoogleTranslator
 
-# 1. பக்க அமைப்பு
+# 1. பக்க அமைப்பு (Page Configuration)
 st.set_page_config(page_title="TAMIL INVEST HUB PRO", page_icon="📈", layout="wide")
 
-# Session State தொடக்கம்
 if 'is_logged_in' not in st.session_state: st.session_state['is_logged_in'] = False
 if 'watchlist' not in st.session_state: st.session_state['watchlist'] = []
 if 'language' not in st.session_state: st.session_state['language'] = "Tamil"
@@ -15,7 +15,7 @@ if 'language' not in st.session_state: st.session_state['language'] = "Tamil"
 def get_text(en, ta):
     return ta if st.session_state['language'] == "Tamil" else en
 
-# 2. LUXURY DARK UI STYLING
+# 2. UI STYLING (Luxury Dark & Sleek)
 st.markdown("""
     <style>
     html, body, [class*="css"] { 
@@ -31,15 +31,16 @@ st.markdown("""
         display: flex; justify-content: space-between; padding: 10px 0;
         border-bottom: 1px solid #21262d;
     }
-    .m-label { color: #8b949e; font-size: 10px; text-transform: uppercase; font-weight: 600; }
+    .m-label { color: #8b949e; font-size: 9px; text-transform: uppercase; font-weight: 600; }
     .m-value { color: #ffffff; font-size: 13px; font-weight: 700; }
     
     .section-card {
-        background: #0d1117; padding: 15px; border-radius: 12px; border: 1px solid #21262d; margin-bottom: 20px;
+        background: #0d1117; padding: 15px; border-radius: 12px; border: 1px solid #21262d; margin-bottom: 15px;
     }
     .price-card {
-        background: #0d1117; padding: 15px; border-radius: 12px; border: 1px solid #39FF1433; margin-bottom: 20px; text-align:center;
+        background: #0d1117; padding: 15px; border-radius: 12px; border: 1px solid #39FF1433; margin-bottom: 15px; text-align:center;
     }
+    .stTabs [data-baseweb="tab"] { font-size: 11px; padding: 10px 12px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -51,9 +52,8 @@ if not st.session_state['is_logged_in']:
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         u = st.text_input("User ID", key="login_u")
         p = st.text_input("Password", type="password", key="login_p")
-        if st.button("Access Hub 🚀", use_container_width=True):
+        if st.button("Access Pro Hub 🚀", use_container_width=True):
             if u and p: st.session_state['is_logged_in'] = True; st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
 # 4. மெயின் ஹெடர்
@@ -63,25 +63,26 @@ with col_h2:
     if st.button("Logout 🚪"): st.session_state['is_logged_in'] = False; st.rerun()
 
 st.markdown('<p class="main-title">TAMIL INVEST HUB</p>', unsafe_allow_html=True)
-u_input = st.text_input("Search Symbol (eg: RELIANCE)", value="RELIANCE").upper().strip()
+u_input = st.text_input("Search Symbol (eg: SBIN, RELIANCE)", value="RELIANCE").upper().strip()
 ticker_symbol = u_input if any(x in u_input for x in [".NS", ".BO"]) else f"{u_input}.NS"
 
 tabs = st.tabs([
     f"📊 {get_text('Analysis', 'பகுப்பாய்வு')}", 
+    f"🔮 {get_text('Rating', 'ரேட்டிங்')}",
     f"🤝 {get_text('Shareholding', 'பங்குதாரர்')}", 
     f"💰 {get_text('Financials', 'நிதிநிலை')}",
     f"📅 {get_text('Actions', 'நிகழ்வுகள்')}",
-    f"📌 {get_text('Watchlist', 'வாட்ச்லிஸ்ட்')}",
-    f"🔮 {get_text('Rating', 'ரேட்டிங்')}"
+    f"📌 {get_text('Watchlist', 'வாட்ச்லிஸ்ட்')}"
 ])
 
 # 5. DATA ENGINE
 try:
     stock = yf.Ticker(ticker_symbol)
     info = stock.info
+    # Technical Analysis-க்கு 1 வருட தரவு தேவை
     hist = stock.history(period="1y")
 
-    # --- TAB 1: ANALYSIS (52W Side-by-Side & About Us) ---
+    # --- TAB 1: ANALYSIS (Two Column Layout) ---
     with tabs[0]:
         st.subheader(info.get('longName', ticker_symbol))
         ltp = info.get('currentPrice') or info.get('regularMarketPrice') or 0
@@ -91,9 +92,11 @@ try:
         with c1:
             st.markdown(f'<div class="metric-container"><span class="m-label">52W High (உச்சம்)</span><span class="m-value" style="color:#39FF14;">₹{info.get("fiftyTwoWeekHigh", 0):,.2f}</span></div>', unsafe_allow_html=True)
             st.markdown(f'<div class="metric-container"><span class="m-label">Market Cap</span><span class="m-value">₹{info.get("marketCap", 0)/10000000:,.0f} Cr</span></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-container"><span class="m-label">P/E Ratio</span><span class="m-value">{info.get("trailingPE", "N/A")}</span></div>', unsafe_allow_html=True)
         with c2:
             st.markdown(f'<div class="metric-container"><span class="m-label">52W Low (தாழ்வு)</span><span class="m-value" style="color:#FF3131;">₹{info.get("fiftyTwoWeekLow", 0):,.2f}</span></div>', unsafe_allow_html=True)
             st.markdown(f'<div class="metric-container"><span class="m-label">Sector</span><span class="m-value">{info.get("sector", "N/A")}</span></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-container"><span class="m-label">EPS (TTM)</span><span class="m-value">{info.get("trailingEps", "N/A")}</span></div>', unsafe_allow_html=True)
 
         st.markdown(f"### 🏢 {get_text('About Company', 'நிறுவனத்தைப் பற்றி')}")
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
@@ -101,79 +104,96 @@ try:
         st.write(GoogleTranslator(source='auto', target='ta').translate(about) if st.session_state['language']=="Tamil" else about)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # --- TAB 2: SHAREHOLDING (FIXED) ---
+    # --- TAB 2: ADVANCED RATING (FUNDAMENTAL + TECHNICAL) ---
     with tabs[1]:
+        st.markdown(f"### 🔮 {get_text('Investment Rating', 'முதலீட்டு மதிப்பீடு')}")
+        
+        # 1. Fundamental Score (Max 60)
+        f_score = 0
+        roe = info.get('returnOnEquity', 0) * 100
+        debt = info.get('debtToEquity', 100) / 100
+        pe = info.get('trailingPE', 100)
+        
+        if roe > 15: f_score += 20
+        if debt < 1: f_score += 20
+        if pe < 25: f_score += 20
+        
+        # 2. Technical Score (Max 40)
+        t_score = 0
+        if not hist.empty and len(hist) > 50:
+            # RSI Calculation
+            delta = hist['Close'].diff()
+            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+            rsi = 100 - (100 / (1 + (gain / loss))).iloc[-1]
+            
+            # MA Logic
+            sma50 = hist['Close'].rolling(window=50).mean().iloc[-1]
+            current_p = hist['Close'].iloc[-1]
+            
+            if 40 < rsi < 70: t_score += 20 # Healthy zone
+            if current_p > sma50: t_score += 20 # Bullish trend
+        
+        total_score = f_score + t_score
+        clr = "#39FF14" if total_score > 70 else ("#00D1FF" if total_score > 45 else "#FF3131")
+        rec = get_text("BUY", "வாங்கலாம்") if total_score > 70 else (get_text("HOLD", "வைத்திருக்கலாம்") if total_score > 45 else get_text("SELL", "விற்கலாம்"))
+
+        st.markdown(f"""
+            <div style="border:2px solid {clr}; padding:30px; border-radius:15px; text-align:center; background: {clr}10;">
+                <p style="color: #8b949e; font-size: 14px;">Overall Confidence Score</p>
+                <h1 style="color:{clr}; font-size:52px; margin:0;">{total_score}%</h1>
+                <h2 style="color:{clr}; margin:10px 0; font-weight:800;">{rec}</h2>
+                <hr style="border:0.5px solid #222; margin: 20px 0;">
+                <div style="display:flex; justify-content: space-around; font-size:12px; color:#8b949e;">
+                    <span>Fundamental: {f_score}/60</span>
+                    <span>Technical: {t_score}/40</span>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    # --- TAB 3: SHAREHOLDING (FII/DII Fixed) ---
+    with tabs[2]:
         st.markdown(f"### {get_text('Shareholding Pattern', 'பங்குதாரர் விபரம்')}")
         promo = (info.get('heldPercentInsiders') or 0) * 100
         inst_total = (info.get('heldPercentInstitutions') or 0) * 100
-        # FII/DII logic with safe fallback
         fii = info.get('foreignInstitutionalHolders', 0) * 100
-        if fii == 0: fii = inst_total * 0.6 # Standard split estimation
+        if fii == 0: fii = inst_total * 0.6 
         dii = max(0, inst_total - fii)
         pub = max(0, 100 - (promo + inst_total))
 
-        fig_pie = go.Figure(data=[go.Pie(labels=['Promoters', 'FII', 'DII', 'Public'], values=[promo, fii, dii, pub], 
-                                         hole=0.6, marker=dict(colors=['#1A73E8', '#D32F2F', '#00C853', '#FFAB00'], line=dict(color='#050505', width=2)))])
-        st.plotly_chart(fig_pie.update_layout(template="plotly_dark", height=400), use_container_width=True)
+        fig = go.Figure(data=[go.Pie(labels=['Promoters', 'FII', 'DII', 'Public'], values=[promo, fii, dii, pub], 
+                                     hole=0.6, marker=dict(colors=['#1A73E8', '#D32F2F', '#00C853', '#FFAB00'], line=dict(color='#050505', width=2)))])
+        st.plotly_chart(fig.update_layout(template="plotly_dark", height=400), use_container_width=True)
 
-    # --- TAB 3: FINANCIALS (FIXED & EXPANDED) ---
-    with tabs[2]:
-        st.markdown(f"### 💰 {get_text('Financial Growth', 'நிதிநிலை வளர்ச்சி')}")
+    # --- TAB 4: FINANCIALS ---
+    with tabs[3]:
+        st.markdown(f"### 💰 {get_text('Key Metrics', 'நிதிநிலை விவரம்')}")
         balance = stock.balance_sheet
-        fin_stmt = stock.financials
-        
         reserves = balance.loc['Retained Earnings'].iloc[0] if not balance.empty and 'Retained Earnings' in balance.index else 0
         
         fc1, fc2 = st.columns(2)
         with fc1:
             st.markdown(f'<div class="metric-container"><span class="m-label">Net Profit (லாபம்)</span><span class="m-value">₹{info.get("netIncomeToCommon", 0)/10000000:,.2f} Cr</span></div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="metric-container"><span class="m-label">Reserves (இருப்பு)</span><span class="m-value">₹{reserves/10000000:,.2f} Cr</span></div>', unsafe_allow_html=True)
-        with fc2:
             st.markdown(f'<div class="metric-container"><span class="m-label">Total Debt (கடன்)</span><span class="m-value">₹{info.get("totalDebt", 0)/10000000:,.2f} Cr</span></div>', unsafe_allow_html=True)
-            st.markdown(f'<div class="metric-container"><span class="m-label">Revenue Growth</span><span class="m-value">{(info.get("revenueGrowth", 0)*100):.2f}%</span></div>', unsafe_allow_html=True)
+        with fc2:
+            st.markdown(f'<div class="metric-container"><span class="m-label">Reserves (இருப்பு)</span><span class="m-value">₹{reserves/10000000:,.2f} Cr</span></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="metric-container"><span class="m-label">Cash Flow</span><span class="m-value">₹{info.get("totalCash", 0)/10000000:,.2f} Cr</span></div>', unsafe_allow_html=True)
 
-        if not fin_stmt.empty:
-            st.markdown(f"### 📈 {get_text('Profit History', 'லாப வளர்ச்சி வரைபடம்')}")
-            row_idx = 'Net Income' if 'Net Income' in fin_stmt.index else fin_stmt.index[0]
-            profit_vals = fin_stmt.loc[row_idx].sort_index()
-            fig_prof = go.Figure(data=[go.Scatter(x=profit_vals.index, y=profit_vals.values/10000000, mode='lines+markers', line=dict(color='#39FF14'))])
-            st.plotly_chart(fig_prof.update_layout(template="plotly_dark", height=300), use_container_width=True)
-
-    # --- TAB 4: ACTIONS (FIXED) ---
-    with tabs[3]:
-        st.markdown(f"### 📅 {get_text('Corporate Actions', 'நிறுவன நிகழ்வுகள்')}")
-        act = stock.actions
-        if not act.empty:
-            st.dataframe(act.sort_index(ascending=False).head(15), use_container_width=True)
-        else:
-            st.info("No recent data found.")
-
-    # --- TAB 5: WATCHLIST ---
+    # --- TAB 5: ACTIONS ---
     with tabs[4]:
-        if st.button(f"🚀 Add {u_input}"):
+        st.markdown(f"### 📅 {get_text('Corporate Actions', 'நிறுவன நிகழ்வுகள்')}")
+        if not stock.actions.empty:
+            st.dataframe(stock.actions.sort_index(ascending=False).head(15), use_container_width=True)
+        else: st.info("No recent data found.")
+
+    # --- TAB 6: WATCHLIST ---
+    with tabs[5]:
+        if st.button(f"🚀 Add {u_input} to Watchlist", use_container_width=True):
             if u_input not in st.session_state['watchlist']: st.session_state['watchlist'].append(u_input); st.rerun()
         for item in st.session_state['watchlist']:
             cw1, cw2 = st.columns([7, 1])
-            cw1.markdown(f'<div class="section-card" style="padding:10px; margin-bottom:5px;">📈 {item}</div>', unsafe_allow_html=True)
+            cw1.markdown(f'<div class="watchlist-card">📈 {item}</div>', unsafe_allow_html=True)
             if cw2.button("❌", key=f"del_{item}"): st.session_state['watchlist'].remove(item); st.rerun()
-
-    # --- TAB 6: RATING (FIXED) ---
-    with tabs[5]:
-        # Scoring Logic
-        pe = info.get('trailingPE', 100)
-        roe = info.get('returnOnEquity', 0) * 100
-        score = 85 if (pe < 25 and roe > 15) else (65 if pe < 40 else 40)
-        
-        clr = "#39FF14" if score > 70 else ("#00D1FF" if score > 50 else "#FF3131")
-        rec = "BUY" if score > 70 else ("HOLD" if score > 50 else "SELL")
-
-        st.markdown(f"""
-            <div style="border:2px solid {clr}; padding:25px; border-radius:15px; text-align:center; background: {clr}10;">
-                <h1 style="color:{clr}; font-size:45px; margin:0;">{score}%</h1>
-                <h2 style="color:{clr}; margin:10px 0;">{rec}</h2>
-                <p style="color:#8b949e;">Investment Confidence Rating</p>
-            </div>
-        """, unsafe_allow_html=True)
 
 except Exception:
     st.error("Error loading data. Please check the symbol.")
