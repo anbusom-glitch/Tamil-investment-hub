@@ -1,1069 +1,1210 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, PieChart, Pie, Cell, RadialBarChart, RadialBar } from "recharts";
+# -*- coding: utf-8 -*-
+# =============================================================
+# TAMIL INVEST HUB PRO - Created by Somasundaram
+# Fixed Version - No Unicode special characters
+# =============================================================
 
-// ─────────────────────────────────────────────────────────────
-// STOCK DATA ENGINE — uses Yahoo Finance via allorigins proxy
-// ─────────────────────────────────────────────────────────────
-const PROXY = "https://query1.finance.yahoo.com/v8/finance/chart/";
+import streamlit as st
+import yfinance as yf
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from datetime import datetime
 
-// Curated stock universe
-const STOCKS = {
-  "RELIANCE.NS": { name: "Reliance Industries", sector: "Energy", idx: "NIFTY50" },
-  "TCS.NS":      { name: "Tata Consultancy Services", sector: "IT", idx: "NIFTY50" },
-  "INFY.NS":     { name: "Infosys", sector: "IT", idx: "NIFTY50" },
-  "HDFCBANK.NS": { name: "HDFC Bank", sector: "Banking", idx: "NIFTY50" },
-  "SBIN.NS":     { name: "State Bank of India", sector: "Banking", idx: "NIFTY50" },
-  "WIPRO.NS":    { name: "Wipro", sector: "IT", idx: "NIFTY50" },
-  "AAPL":        { name: "Apple Inc.", sector: "Technology", idx: "S&P500" },
-  "MSFT":        { name: "Microsoft", sector: "Technology", idx: "S&P500" },
-  "GOOGL":       { name: "Alphabet", sector: "Technology", idx: "S&P500" },
-  "TSLA":        { name: "Tesla", sector: "Auto", idx: "S&P500" },
-  "NVDA":        { name: "NVIDIA", sector: "Semiconductors", idx: "S&P500" },
-  "META":        { name: "Meta Platforms", sector: "Technology", idx: "S&P500" },
-};
+# =============================================================
+# 1. PAGE CONFIG
+# =============================================================
+st.set_page_config(
+    page_title="TAMIL INVEST HUB PRO",
+    page_icon="📈",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
-// RSI
-function calcRSI(closes, period = 14) {
-  if (closes.length < period + 1) return [];
-  const result = new Array(period).fill(null);
-  let gains = 0, losses = 0;
-  for (let i = 1; i <= period; i++) {
-    const d = closes[i] - closes[i - 1];
-    if (d > 0) gains += d; else losses -= d;
-  }
-  let avgG = gains / period, avgL = losses / period;
-  result.push(avgL === 0 ? 100 : 100 - 100 / (1 + avgG / avgL));
-  for (let i = period + 1; i < closes.length; i++) {
-    const d = closes[i] - closes[i - 1];
-    avgG = (avgG * (period - 1) + Math.max(d, 0)) / period;
-    avgL = (avgL * (period - 1) + Math.max(-d, 0)) / period;
-    result.push(avgL === 0 ? 100 : 100 - 100 / (1 + avgG / avgL));
-  }
-  return result;
+# =============================================================
+# 2. SESSION STATE
+# =============================================================
+defaults = {
+    'is_logged_in': False,
+    'language': "Tamil",
+    'portfolio': [],
+    'watchlist': [],
+    'username': '',
+    'last_symbol': '',
+    'last_data': None,
+}
+for key, default in defaults.items():
+    if key not in st.session_state:
+        st.session_state[key] = default
+
+def get_text(en, ta):
+    return ta if st.session_state['language'] == "Tamil" else en
+
+# =============================================================
+# 3. PREMIUM STYLING
+# =============================================================
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Exo+2:wght@300;400;600;700;800&display=swap');
+
+html, body, [class*="css"] {
+    background-color: #020509 !important;
+    color: #dde6f0;
+    font-family: 'Exo 2', sans-serif;
+    font-size: 15px !important;
 }
 
-function calcEMA(arr, period) {
-  const k = 2 / (period + 1);
-  const result = new Array(period - 1).fill(null);
-  let ema = arr.slice(0, period).reduce((a, b) => a + b, 0) / period;
-  result.push(ema);
-  for (let i = period; i < arr.length; i++) {
-    ema = arr[i] * k + ema * (1 - k);
-    result.push(ema);
-  }
-  return result;
+.main-title {
+    font-family: 'Orbitron', monospace;
+    font-size: 36px !important;
+    font-weight: 900;
+    background: linear-gradient(90deg, #39FF14 0%, #00FFD1 50%, #00AAFF 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: 4px;
+    margin: 0;
+    line-height: 1.1;
 }
 
-function calcMACD(closes) {
-  const ema12 = calcEMA(closes, 12);
-  const ema26 = calcEMA(closes, 26);
-  const macd = ema12.map((v, i) => (v && ema26[i] ? v - ema26[i] : null));
-  const validMacd = macd.filter(Boolean);
-  const signal9 = calcEMA(validMacd, 9);
-  let s9Idx = 0;
-  const signal = macd.map(v => {
-    if (v === null) return null;
-    return signal9[s9Idx++] ?? null;
-  });
-  return { macd, signal };
+.sub-title {
+    font-size: 11px !important;
+    color: #3a4a5a;
+    letter-spacing: 5px;
+    text-transform: uppercase;
+    margin-top: 2px;
+    font-family: 'Exo 2', sans-serif;
 }
 
-function calcBB(closes, period = 20, std = 2) {
-  return closes.map((_, i) => {
-    if (i < period - 1) return { upper: null, mid: null, lower: null };
-    const slice = closes.slice(i - period + 1, i + 1);
-    const mean = slice.reduce((a, b) => a + b, 0) / period;
-    const variance = slice.reduce((a, b) => a + (b - mean) ** 2, 0) / period;
-    const sd = Math.sqrt(variance);
-    return { upper: mean + std * sd, mid: mean, lower: mean - std * sd };
-  });
+.price-card {
+    background: linear-gradient(135deg, #0a1628 0%, #0d1f0d 100%);
+    padding: 22px 28px;
+    border-radius: 18px;
+    border: 1px solid rgba(57,255,20,0.25);
+    box-shadow: 0 0 30px rgba(57,255,20,0.08);
+    margin-bottom: 18px;
+    text-align: center;
 }
 
-// Simulate realistic stock data (Yahoo Finance often blocks CORS)
-function generateStockData(symbol, days = 252) {
-  const meta = STOCKS[symbol] || { name: symbol, sector: "Unknown" };
-  const seeds = {
-    "RELIANCE.NS": { base: 2850, vol: 0.015 },
-    "TCS.NS":      { base: 3920, vol: 0.012 },
-    "INFY.NS":     { base: 1780, vol: 0.014 },
-    "HDFCBANK.NS": { base: 1650, vol: 0.013 },
-    "SBIN.NS":     { base: 815,  vol: 0.018 },
-    "WIPRO.NS":    { base: 465,  vol: 0.016 },
-    "AAPL":        { base: 213,  vol: 0.014 },
-    "MSFT":        { base: 415,  vol: 0.013 },
-    "GOOGL":       { base: 178,  vol: 0.015 },
-    "TSLA":        { base: 248,  vol: 0.028 },
-    "NVDA":        { base: 875,  vol: 0.025 },
-    "META":        { base: 512,  vol: 0.018 },
-  };
-  const cfg = seeds[symbol] || { base: 500, vol: 0.015 };
-  let price = cfg.base;
-  const trend = 0.0003;
-  const data = [];
-  const now = new Date();
-
-  for (let i = days; i >= 0; i--) {
-    const date = new Date(now);
-    date.setDate(date.getDate() - i);
-    if (date.getDay() === 0 || date.getDay() === 6) continue;
-    const change = (Math.random() - 0.48) * cfg.vol + trend;
-    price = price * (1 + change);
-    const open = price * (1 + (Math.random() - 0.5) * 0.008);
-    const high = Math.max(open, price) * (1 + Math.random() * 0.008);
-    const low  = Math.min(open, price) * (1 - Math.random() * 0.008);
-    const volume = Math.floor((Math.random() * 0.5 + 0.75) * cfg.base * 50000);
-    data.push({
-      date: date.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
-      fullDate: date.toISOString().split("T")[0],
-      open: +open.toFixed(2),
-      high: +high.toFixed(2),
-      low:  +low.toFixed(2),
-      close: +price.toFixed(2),
-      volume,
-    });
-  }
-
-  const closes = data.map(d => d.close);
-  const rsi = calcRSI(closes);
-  const bb  = calcBB(closes);
-  const { macd, signal } = calcMACD(closes);
-  const ema20  = calcEMA(closes, 20);
-  const ema50  = calcEMA(closes, 50);
-  const ema200 = calcEMA(closes, 200);
-
-  const enriched = data.map((d, i) => ({
-    ...d,
-    rsi:    rsi[i]   !== null ? +rsi[i].toFixed(2)   : null,
-    bbU:    bb[i].upper !== null ? +bb[i].upper.toFixed(2) : null,
-    bbM:    bb[i].mid   !== null ? +bb[i].mid.toFixed(2)   : null,
-    bbL:    bb[i].lower !== null ? +bb[i].lower.toFixed(2) : null,
-    macd:   macd[i]  !== null ? +macd[i].toFixed(4)  : null,
-    signal: signal[i]!== null ? +signal[i].toFixed(4): null,
-    hist:   macd[i] && signal[i] ? +(macd[i] - signal[i]).toFixed(4) : null,
-    ema20:  ema20[i] !== null ? +ema20[i].toFixed(2)  : null,
-    ema50:  ema50[i] !== null ? +ema50[i].toFixed(2)  : null,
-    ema200: ema200[i]!== null ? +ema200[i].toFixed(2) : null,
-  }));
-
-  const last    = enriched[enriched.length - 1];
-  const prev    = enriched[enriched.length - 2];
-  const week52H = Math.max(...closes);
-  const week52L = Math.min(...closes);
-  const isINR   = symbol.endsWith(".NS") || symbol.endsWith(".BO");
-  const cur     = isINR ? "₹" : "$";
-
-  // Simulated fundamentals
-  const mcap   = price * cfg.base * 12000000;
-  const pe     = +(15 + Math.random() * 20).toFixed(1);
-  const pb     = +(1.5 + Math.random() * 4).toFixed(2);
-  const roe    = +(8 + Math.random() * 22).toFixed(1);
-  const debt   = +(10 + Math.random() * 150).toFixed(1);
-  const margin = +(5 + Math.random() * 25).toFixed(1);
-  const revGrw = +((-5 + Math.random() * 30)).toFixed(1);
-  const epsGrw = +((-10 + Math.random() * 35)).toFixed(1);
-  const curRat = +(0.8 + Math.random() * 2).toFixed(2);
-  const divYld = +(Math.random() * 3).toFixed(2);
-  const beta   = +(0.5 + Math.random() * 1.2).toFixed(2);
-
-  return { enriched, last, prev, week52H, week52L, cur, isINR, pe, pb, roe, debt, margin, revGrw, epsGrw, curRat, divYld, beta, mcap, meta };
+.ltp-price {
+    font-family: 'Orbitron', monospace;
+    font-size: 42px !important;
+    font-weight: 900;
+    color: #39FF14;
+    text-shadow: 0 0 20px rgba(57,255,20,0.4);
+    line-height: 1;
 }
 
-function fmtNum(n, cur = "₹") {
-  if (!n || isNaN(n)) return "N/A";
-  if (n >= 1e12) return `${cur}${(n/1e12).toFixed(2)}T`;
-  if (n >= 1e9)  return `${cur}${(n/1e9).toFixed(2)}B`;
-  if (n >= 1e7)  return `${cur}${(n/1e7).toFixed(2)}Cr`;
-  if (n >= 1e6)  return `${cur}${(n/1e6).toFixed(2)}M`;
-  return `${cur}${n.toFixed(2)}`;
+.ltp-change {
+    font-size: 18px !important;
+    font-weight: 700;
+    font-family: 'Exo 2', sans-serif;
 }
 
-// ─────────────────────────────────────────────────────────────
-// AI ANALYSIS via Claude API
-// ─────────────────────────────────────────────────────────────
-async function getAIAnalysis(stockData, question = null) {
-  const { last, pe, roe, debt, margin, revGrw, epsGrw, meta } = stockData;
-  const rsi = last.rsi;
-  const macdBull = last.macd > last.signal;
-
-  const prompt = question || `
-You are an elite quantitative stock analyst. Analyze ${meta.name} (${meta.sector} sector) with this data:
-
-PRICE: ${stockData.cur}${last.close} | RSI: ${rsi?.toFixed(1)} | MACD: ${macdBull ? "BULLISH" : "BEARISH"}
-EMA50: ${last.ema50?.toFixed(2)} | EMA200: ${last.ema200?.toFixed(2)} | Golden Cross: ${last.ema50 > last.ema200 ? "YES" : "NO"}
-PE: ${pe} | ROE: ${roe}% | Debt/Eq: ${debt} | Net Margin: ${margin}% | Rev Growth: ${revGrw}%
-
-Provide a structured analysis in this EXACT JSON format (respond ONLY with JSON):
-{
-  "verdict": "STRONG BUY | BUY | HOLD | SELL | STRONG SELL",
-  "score": <0-100>,
-  "headline": "<one punchy 8-word analysis headline>",
-  "technical": "<2-sentence technical outlook>",
-  "fundamental": "<2-sentence fundamental analysis>",
-  "risk": "<1-sentence key risk>",
-  "targets": { "bull": <price>, "base": <price>, "bear": <price> },
-  "catalysts": ["<catalyst 1>", "<catalyst 2>", "<catalyst 3>"],
-  "summary": "<3-sentence overall summary for retail investors>"
-}`;
-
-  try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1000,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
-    const data = await res.json();
-    const text = data.content?.map(c => c.text || "").join("") || "";
-    const clean = text.replace(/```json|```/g, "").trim();
-    return JSON.parse(clean);
-  } catch {
-    return null;
-  }
+.section-card {
+    background: #080f18;
+    padding: 20px 22px;
+    border-radius: 14px;
+    border: 1px solid #1a2535;
+    margin-bottom: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
 }
 
-// ─────────────────────────────────────────────────────────────
-// COMPONENTS
-// ─────────────────────────────────────────────────────────────
-
-const COLORS = {
-  bg:      "#050A10",
-  panel:   "#080E16",
-  border:  "#0F1E2D",
-  accent:  "#00E5FF",
-  green:   "#00FF8C",
-  red:     "#FF3B5C",
-  gold:    "#FFB800",
-  purple:  "#B060FF",
-  text:    "#E4EDF5",
-  muted:   "#3A5068",
-};
-
-function Sparkline({ data, color, height = 40 }) {
-  if (!data || data.length === 0) return null;
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const range = max - min || 1;
-  const w = 120, h = height;
-  const pts = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * w;
-    const y = h - ((v - min) / range) * h;
-    return `${x},${y}`;
-  }).join(" ");
-  return (
-    <svg width={w} height={h} style={{ overflow: "visible" }}>
-      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
-    </svg>
-  );
+.metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 11px 0;
+    border-bottom: 1px solid #111d2a;
 }
 
-function ScoreGauge({ score, verdict }) {
-  const colors = score >= 70 ? COLORS.green : score >= 50 ? COLORS.gold : COLORS.red;
-  const angle = (score / 100) * 180 - 90;
-  const rad = (angle * Math.PI) / 180;
-  const cx = 100, cy = 85, r = 70;
-  const needleX = cx + r * 0.7 * Math.cos(rad);
-  const needleY = cy + r * 0.7 * Math.sin(rad);
-
-  const arc = (startDeg, endDeg, color) => {
-    const s = ((startDeg - 90) * Math.PI) / 180;
-    const e = ((endDeg - 90) * Math.PI) / 180;
-    const x1 = cx + r * Math.cos(s), y1 = cy + r * Math.sin(s);
-    const x2 = cx + r * Math.cos(e), y2 = cy + r * Math.sin(e);
-    const lg = endDeg - startDeg > 180 ? 1 : 0;
-    return `M${x1},${y1} A${r},${r} 0 ${lg},1 ${x2},${y2}`;
-  };
-
-  return (
-    <svg width="200" height="110" viewBox="0 0 200 110">
-      <defs>
-        <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor={COLORS.red} />
-          <stop offset="50%" stopColor={COLORS.gold} />
-          <stop offset="100%" stopColor={COLORS.green} />
-        </linearGradient>
-      </defs>
-      <path d={arc(0, 180)} fill="none" stroke="#0F1E2D" strokeWidth="12" strokeLinecap="round" />
-      <path d={arc(0, score * 1.8)} fill="none" stroke="url(#g1)" strokeWidth="10" strokeLinecap="round" />
-      <line x1={cx} y1={cy} x2={needleX} y2={needleY} stroke={colors} strokeWidth="2.5" strokeLinecap="round" />
-      <circle cx={cx} cy={cy} r="5" fill={colors} />
-      <text x={cx} y={cy + 22} textAnchor="middle" fill={colors} fontSize="22" fontWeight="900" fontFamily="'Space Grotesk', monospace">{score}</text>
-      <text x={cx} y={cy + 38} textAnchor="middle" fill={COLORS.muted} fontSize="8" fontFamily="monospace" letterSpacing="1">{verdict}</text>
-    </svg>
-  );
+.m-label {
+    color: #5a7a9a;
+    font-size: 12px;
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.8px;
 }
 
-function MiniChart({ data, field, color, height = 80 }) {
-  const filtered = data.filter(d => d[field] !== null).slice(-60);
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={filtered} margin={{ top: 2, right: 0, left: 0, bottom: 2 }}>
-        <defs>
-          <linearGradient id={`grad-${field}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor={color} stopOpacity={0.3} />
-            <stop offset="95%" stopColor={color} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <Area type="monotone" dataKey={field} stroke={color} fill={`url(#grad-${field})`} strokeWidth={1.5} dot={false} />
-      </AreaChart>
-    </ResponsiveContainer>
-  );
+.m-value {
+    color: #eaf2ff;
+    font-family: 'Orbitron', monospace;
+    font-size: 14px;
+    font-weight: 700;
 }
 
-// ─────────────────────────────────────────────────────────────
-// MAIN APP
-// ─────────────────────────────────────────────────────────────
-export default function App() {
-  const [symbol, setSymbol] = useState("RELIANCE.NS");
-  const [search, setSearch] = useState("");
-  const [period, setPeriod] = useState(252);
-  const [tab, setTab] = useState("chart");
-  const [stockData, setStockData] = useState(null);
-  const [aiData, setAiData] = useState(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [chartMode, setChartMode] = useState("area");
-  const [overlay, setOverlay] = useState("ema");
-  const [showSearch, setShowSearch] = useState(false);
-  const [watchlist, setWatchlist] = useState(["TCS.NS", "AAPL", "NVDA"]);
-  const [aiQ, setAiQ] = useState("");
-  const [aiAnswer, setAiAnswer] = useState("");
-  const [aiQLoading, setAiQLoading] = useState(false);
-  const [portfolio, setPortfolio] = useState([
-    { symbol: "RELIANCE.NS", qty: 50, avg: 2700 },
-    { symbol: "TCS.NS", qty: 20, avg: 3800 },
-  ]);
-  const [notification, setNotification] = useState("");
+.stat-card {
+    background: #080f18;
+    border-radius: 14px;
+    border: 1px solid #1a2535;
+    padding: 16px 12px;
+    text-align: center;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+}
 
-  const notify = (msg) => { setNotification(msg); setTimeout(() => setNotification(""), 3000); };
+.stat-label {
+    color: #5a7a9a;
+    font-size: 11px;
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    margin-bottom: 6px;
+}
 
-  useEffect(() => {
-    const data = generateStockData(symbol, period);
-    setStockData(data);
-    setAiData(null);
-  }, [symbol, period]);
+.stat-value {
+    font-family: 'Orbitron', monospace;
+    font-size: 16px;
+    font-weight: 700;
+}
 
-  const runAI = useCallback(async () => {
-    if (!stockData) return;
-    setAiLoading(true);
-    const result = await getAIAnalysis(stockData);
-    setAiData(result);
-    setAiLoading(false);
-  }, [stockData]);
+.green { color: #39FF14 !important; }
+.red   { color: #FF4455 !important; }
+.blue  { color: #00D4FF !important; }
+.gold  { color: #FFD700 !important; }
 
-  const askAI = async () => {
-    if (!aiQ.trim() || !stockData) return;
-    setAiQLoading(true);
-    const result = await getAIAnalysis(stockData, aiQ);
-    setAiAnswer(typeof result === "string" ? result : JSON.stringify(result, null, 2));
-    setAiQLoading(false);
-  };
+button[data-baseweb="tab"] {
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    font-family: 'Exo 2', sans-serif !important;
+    letter-spacing: 0.5px !important;
+}
 
-  if (!stockData) return <div style={{ background: COLORS.bg, height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: COLORS.accent, fontFamily: "monospace" }}>Initializing...</div>;
+button[data-baseweb="tab"][aria-selected="true"] {
+    color: #39FF14 !important;
+}
 
-  const { enriched, last, prev, week52H, week52L, cur, pe, pb, roe, debt, margin, revGrw, epsGrw, curRat, divYld, beta, mcap, meta } = stockData;
+.badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 99px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    font-family: 'Exo 2', sans-serif;
+}
 
-  const dayChg = last.close - prev.close;
-  const dayPct = (dayChg / prev.close * 100);
-  const isUp = dayChg >= 0;
-  const priceColor = isUp ? COLORS.green : COLORS.red;
+.badge-green { background: rgba(57,255,20,0.12);  color: #39FF14; border: 1px solid rgba(57,255,20,0.35); }
+.badge-red   { background: rgba(255,68,85,0.12);   color: #FF4455; border: 1px solid rgba(255,68,85,0.35); }
+.badge-blue  { background: rgba(0,212,255,0.12);   color: #00D4FF; border: 1px solid rgba(0,212,255,0.35); }
+.badge-gold  { background: rgba(255,215,0,0.12);   color: #FFD700; border: 1px solid rgba(255,215,0,0.35); }
 
-  const displayData = enriched.slice(-period).filter((_, i, arr) => {
-    const step = Math.max(1, Math.floor(arr.length / 200));
-    return i % step === 0;
-  });
+section[data-testid="stSidebar"] {
+    background: #060c16 !important;
+    border-right: 1px solid #1a2535;
+}
 
-  // Rating calc
-  const rsiScore  = last.rsi ? (last.rsi > 70 || last.rsi < 30 ? 6 : 12) : 6;
-  const macdScore = last.macd > last.signal ? 14 : 0;
-  const emaScore  = last.close > (last.ema50 || 0) ? 8 : 0;
-  const gxScore   = (last.ema50 || 0) > (last.ema200 || 0) ? 6 : 0;
-  const roeScore  = Math.min(15, roe / 25 * 15);
-  const debtScore = debt < 50 ? 12 : debt < 100 ? 8 : debt < 200 ? 4 : 0;
-  const margScore = Math.min(8, margin / 20 * 8);
-  const curScore  = curRat > 1.5 ? 5 : curRat > 1 ? 3 : 0;
-  const revScore  = Math.min(10, Math.max(0, revGrw / 20 * 10));
-  const epsScore  = Math.min(10, Math.max(0, epsGrw / 20 * 10));
-  const totalScore = Math.round(rsiScore + macdScore + emaScore + gxScore + roeScore + debtScore + margScore + curScore + revScore + epsScore);
-  const techScore = rsiScore + macdScore + emaScore + gxScore;
-  const fundScore = roeScore + debtScore + margScore + curScore;
-  const grwScore  = revScore + epsScore;
+input[type="text"], input[type="password"] {
+    font-size: 15px !important;
+    font-family: 'Exo 2', sans-serif !important;
+}
 
-  const verdict = totalScore >= 70 ? "STRONG BUY" : totalScore >= 55 ? "BUY" : totalScore >= 40 ? "HOLD" : "AVOID";
-  const verdictColor = totalScore >= 70 ? COLORS.green : totalScore >= 55 ? "#00FFD1" : totalScore >= 40 ? COLORS.gold : COLORS.red;
+.watch-tag {
+    display: inline-block;
+    background: rgba(0,212,255,0.1);
+    border: 1px solid rgba(0,212,255,0.3);
+    border-radius: 8px;
+    padding: 4px 10px;
+    margin: 3px;
+    font-size: 13px;
+    color: #00D4FF;
+    font-weight: 700;
+}
 
-  // Shareholding simulation
-  const promoter = 40 + Math.random() * 20;
-  const fii = 15 + Math.random() * 20;
-  const dii = 10 + Math.random() * 15;
-  const pubSH = 100 - promoter - fii - dii;
+.news-card {
+    background: #080f18;
+    border-left: 3px solid #39FF14;
+    border-radius: 0 10px 10px 0;
+    padding: 12px 16px;
+    margin-bottom: 10px;
+}
 
-  const pieData = [
-    { name: "Promoters", value: +promoter.toFixed(1), color: "#1A73E8" },
-    { name: "FII/FPI",   value: +fii.toFixed(1),      color: COLORS.green },
-    { name: "DII",       value: +dii.toFixed(1),       color: COLORS.gold },
-    { name: "Public",    value: +pubSH.toFixed(1),     color: COLORS.purple },
-  ];
+.news-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #dde6f0;
+    margin-bottom: 4px;
+}
 
-  const tabs = [
-    { id: "chart",   label: "CHART",       icon: "◈" },
-    { id: "tech",    label: "TECHNICALS",  icon: "⟡" },
-    { id: "rating",  label: "AI RATING",   icon: "◆" },
-    { id: "fin",     label: "FINANCIALS",  icon: "◉" },
-    { id: "hold",    label: "HOLDINGS",    icon: "◎" },
-    { id: "port",    label: "PORTFOLIO",   icon: "◐" },
-  ];
+.news-meta {
+    font-size: 11px;
+    color: #5a7a9a;
+}
 
-  const filteredStocks = Object.entries(STOCKS).filter(([sym, info]) =>
-    sym.toLowerCase().includes(search.toLowerCase()) || info.name.toLowerCase().includes(search.toLowerCase())
-  );
+div[data-testid="stDataFrame"] {
+    border-radius: 12px;
+    overflow: hidden;
+}
+</style>
+""", unsafe_allow_html=True)
 
-  return (
-    <div style={{ background: COLORS.bg, minHeight: "100vh", fontFamily: "'Space Grotesk', 'Exo 2', system-ui, sans-serif", color: COLORS.text, fontSize: "13px", overflowX: "hidden" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
-        ::-webkit-scrollbar-track { background: ${COLORS.bg}; }
-        ::-webkit-scrollbar-thumb { background: ${COLORS.border}; border-radius: 2px; }
-        input, select, textarea { outline: none; }
-        button { cursor: pointer; border: none; }
-        .tab-btn { transition: all 0.2s ease; }
-        .tab-btn:hover { background: #0A1520 !important; }
-        .stock-row:hover { background: #0A1520 !important; }
-        .pulse { animation: pulse 2s infinite; }
-        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
-        .slide-in { animation: slideIn 0.3s ease; }
-        @keyframes slideIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
-        .glow { box-shadow: 0 0 20px rgba(0,229,255,0.15); }
-        .metric-card:hover { border-color: ${COLORS.accent}44 !important; transform: translateY(-1px); transition: all 0.2s; }
-        .btn-primary { background: linear-gradient(135deg, ${COLORS.accent}22, ${COLORS.purple}22); border: 1px solid ${COLORS.accent}44; color: ${COLORS.accent}; transition: all 0.2s; }
-        .btn-primary:hover { background: linear-gradient(135deg, ${COLORS.accent}33, ${COLORS.purple}33); }
-        .candle-bar { transition: all 0.1s; }
-      `}</style>
-
-      {/* NOTIFICATION */}
-      {notification && (
-        <div style={{ position: "fixed", top: 16, right: 16, background: COLORS.green, color: "#000", padding: "10px 20px", borderRadius: 8, fontWeight: 700, zIndex: 9999, fontSize: 13 }}>
-          {notification}
-        </div>
-      )}
-
-      {/* HEADER */}
-      <div style={{ background: "linear-gradient(180deg, #060C14 0%, transparent 100%)", borderBottom: `1px solid ${COLORS.border}`, padding: "12px 20px", display: "flex", alignItems: "center", gap: 16, position: "sticky", top: 0, zIndex: 100, backdropFilter: "blur(10px)" }}>
-        {/* Logo */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          <div style={{ width: 28, height: 28, background: `linear-gradient(135deg, ${COLORS.accent}, ${COLORS.purple})`, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>◈</div>
-          <div>
-            <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, fontWeight: 700, color: COLORS.accent, letterSpacing: 2 }}>NEXUS</div>
-            <div style={{ fontSize: 8, color: COLORS.muted, letterSpacing: 1 }}>ANALYTICS PRO</div>
-          </div>
-        </div>
-
-        {/* Search */}
-        <div style={{ position: "relative", flex: 1, maxWidth: 400 }}>
-          <input
-            value={search}
-            onChange={e => { setSearch(e.target.value); setShowSearch(true); }}
-            onFocus={() => setShowSearch(true)}
-            onBlur={() => setTimeout(() => setShowSearch(false), 200)}
-            placeholder={`Search stocks...  Currently: ${symbol}`}
-            style={{ width: "100%", background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "8px 14px 8px 36px", color: COLORS.text, fontSize: 13, fontFamily: "inherit" }}
-          />
-          <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: COLORS.muted, fontSize: 14 }}>⌕</span>
-          {showSearch && filteredStocks.length > 0 && (
-            <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, background: "#080E18", border: `1px solid ${COLORS.border}`, borderRadius: 8, zIndex: 200, maxHeight: 240, overflow: "auto" }}>
-              {filteredStocks.map(([sym, info]) => (
-                <div key={sym} className="stock-row" onClick={() => { setSymbol(sym); setSearch(""); setShowSearch(false); }} style={{ padding: "10px 14px", cursor: "pointer", borderBottom: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <div style={{ fontWeight: 700, color: COLORS.text, fontSize: 13 }}>{sym.replace(".NS","").replace(".BO","")}</div>
-                    <div style={{ color: COLORS.muted, fontSize: 11 }}>{info.name}</div>
-                  </div>
-                  <div style={{ fontSize: 10, color: COLORS.accent, background: `${COLORS.accent}15`, padding: "2px 8px", borderRadius: 4 }}>{info.sector}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Period selector */}
-        <div style={{ display: "flex", gap: 4 }}>
-          {[["1M",21],["3M",63],["6M",126],["1Y",252],["2Y",504]].map(([lbl, days]) => (
-            <button key={lbl} onClick={() => setPeriod(days)} style={{ padding: "6px 10px", borderRadius: 6, fontSize: 11, fontWeight: 700, fontFamily: "inherit", background: period === days ? `${COLORS.accent}22` : "transparent", color: period === days ? COLORS.accent : COLORS.muted, border: `1px solid ${period === days ? COLORS.accent + "44" : "transparent"}` }}>
-              {lbl}
-            </button>
-          ))}
-        </div>
-
-        {/* Watchlist quick */}
-        <div style={{ display: "flex", gap: 6 }}>
-          {watchlist.slice(0, 3).map(sym => (
-            <button key={sym} onClick={() => setSymbol(sym)} style={{ padding: "4px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, fontFamily: "inherit", background: symbol === sym ? `${COLORS.accent}15` : "transparent", color: symbol === sym ? COLORS.accent : COLORS.muted, border: `1px solid ${symbol === sym ? COLORS.accent + "33" : COLORS.border}` }}>
-              {sym.replace(".NS","").replace(".BO","")}
-            </button>
-          ))}
-        </div>
-
-        {/* Live dot */}
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginLeft: "auto" }}>
-          <div className="pulse" style={{ width: 6, height: 6, borderRadius: "50%", background: COLORS.green }} />
-          <span style={{ color: COLORS.muted, fontSize: 10, fontFamily: "'Space Mono', monospace" }}>LIVE</span>
-        </div>
-      </div>
-
-      <div style={{ padding: "0 20px 20px" }}>
-
-        {/* PRICE HERO */}
-        <div className="slide-in" style={{ padding: "20px 0 16px", display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: 280 }}>
-            <div style={{ color: COLORS.muted, fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: "uppercase", marginBottom: 4 }}>
-              {meta.sector} · {symbol} · {meta.idx}
-            </div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text, marginBottom: 8 }}>{meta.name}</div>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-              <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 36, fontWeight: 700, color: priceColor, letterSpacing: -1 }}>
-                {cur}{last.close.toLocaleString("en-IN")}
-              </span>
-              <div style={{ display: "flex", flexDirection: "column" }}>
-                <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 15, fontWeight: 700, color: priceColor }}>
-                  {isUp ? "▲" : "▼"} {cur}{Math.abs(dayChg).toFixed(2)}
-                </span>
-                <span style={{ fontSize: 12, color: priceColor, fontWeight: 600 }}>
-                  ({dayPct > 0 ? "+" : ""}{dayPct.toFixed(2)}%)
-                </span>
-              </div>
-            </div>
-
-            {/* Quick metrics row */}
-            <div style={{ display: "flex", gap: 20, marginTop: 12, flexWrap: "wrap" }}>
-              {[
-                ["52W HIGH", `${cur}${week52H.toFixed(0)}`, COLORS.green],
-                ["52W LOW",  `${cur}${week52L.toFixed(0)}`, COLORS.red],
-                ["MKT CAP",  fmtNum(mcap, cur),             COLORS.accent],
-                ["P/E",      pe.toString(),                  COLORS.gold],
-                ["BETA",     beta.toString(),                COLORS.purple],
-              ].map(([lbl, val, col]) => (
-                <div key={lbl}>
-                  <div style={{ color: COLORS.muted, fontSize: 9, letterSpacing: 1.5, fontWeight: 700 }}>{lbl}</div>
-                  <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 13, color: col, fontWeight: 700 }}>{val}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Sparkline + actions */}
-          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-            <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "12px 16px" }}>
-              <Sparkline data={enriched.slice(-30).map(d => d.close)} color={priceColor} height={50} />
-              <div style={{ color: COLORS.muted, fontSize: 9, letterSpacing: 1, marginTop: 4 }}>30D TREND</div>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <button className="btn-primary" onClick={() => { if (!watchlist.includes(symbol)) { setWatchlist([...watchlist, symbol]); notify(`${symbol} added to watchlist`); } }} style={{ padding: "8px 14px", borderRadius: 7, fontSize: 11, fontWeight: 700, fontFamily: "inherit" }}>
-                + WATCH
-              </button>
-              <button onClick={() => { setPortfolio([...portfolio, { symbol, qty: 10, avg: last.close }]); notify(`${symbol} added to portfolio`); }} style={{ padding: "8px 14px", borderRadius: 7, fontSize: 11, fontWeight: 700, fontFamily: "inherit", background: `${COLORS.green}15`, border: `1px solid ${COLORS.green}33`, color: COLORS.green, transition: "all 0.2s" }}>
-                + PORTFOLIO
-              </button>
-            </div>
-          </div>
-
-          {/* Score badge */}
-          <div style={{ background: COLORS.panel, border: `1px solid ${verdictColor}22`, borderRadius: 12, padding: "14px 20px", textAlign: "center" }} className="glow">
-            <div style={{ color: COLORS.muted, fontSize: 9, letterSpacing: 2, fontWeight: 700, marginBottom: 8 }}>NEXUS SCORE</div>
-            <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 42, fontWeight: 700, color: verdictColor, lineHeight: 1 }}>{totalScore}</div>
-            <div style={{ fontSize: 10, fontWeight: 800, color: verdictColor, letterSpacing: 2, marginTop: 4 }}>{verdict}</div>
-          </div>
-        </div>
-
-        {/* TABS */}
-        <div style={{ display: "flex", gap: 2, borderBottom: `1px solid ${COLORS.border}`, marginBottom: 20 }}>
-          {tabs.map(t => (
-            <button key={t.id} className="tab-btn" onClick={() => setTab(t.id)} style={{ padding: "10px 18px", background: "transparent", color: tab === t.id ? COLORS.accent : COLORS.muted, fontWeight: 700, fontSize: 11, letterSpacing: 1.2, fontFamily: "inherit", borderBottom: `2px solid ${tab === t.id ? COLORS.accent : "transparent"}`, borderRadius: 0, marginBottom: -1 }}>
-              {t.icon} {t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* ══════ TAB: CHART ══════ */}
-        {tab === "chart" && (
-          <div className="slide-in">
-            {/* Chart controls */}
-            <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
-              <span style={{ color: COLORS.muted, fontSize: 11, fontWeight: 600 }}>VIEW:</span>
-              {[["area", "AREA"], ["bar", "VOLUME"], ["line", "LINE"]].map(([m, lbl]) => (
-                <button key={m} onClick={() => setChartMode(m)} style={{ padding: "5px 12px", borderRadius: 6, fontSize: 10, fontWeight: 700, fontFamily: "inherit", background: chartMode === m ? `${COLORS.accent}22` : "transparent", color: chartMode === m ? COLORS.accent : COLORS.muted, border: `1px solid ${chartMode === m ? COLORS.accent + "44" : COLORS.border}` }}>
-                  {lbl}
-                </button>
-              ))}
-              <span style={{ color: COLORS.muted, fontSize: 11, fontWeight: 600, marginLeft: 12 }}>OVERLAY:</span>
-              {[["none","NONE"],["ema","EMA"],["bb","BANDS"]].map(([o, lbl]) => (
-                <button key={o} onClick={() => setOverlay(o)} style={{ padding: "5px 12px", borderRadius: 6, fontSize: 10, fontWeight: 700, fontFamily: "inherit", background: overlay === o ? `${COLORS.gold}22` : "transparent", color: overlay === o ? COLORS.gold : COLORS.muted, border: `1px solid ${overlay === o ? COLORS.gold + "44" : COLORS.border}` }}>
-                  {lbl}
-                </button>
-              ))}
-            </div>
-
-            {/* Main chart */}
-            <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "16px 8px" }}>
-              <ResponsiveContainer width="100%" height={340}>
-                {chartMode === "bar" ? (
-                  <BarChart data={displayData} margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} />
-                    <XAxis dataKey="date" tick={{ fill: COLORS.muted, fontSize: 10 }} tickLine={false} axisLine={false} interval={Math.floor(displayData.length / 8)} />
-                    <YAxis tick={{ fill: COLORS.muted, fontSize: 10 }} tickLine={false} axisLine={false} orientation="right" tickFormatter={v => `${v >= 1000 ? (v/1000).toFixed(0)+"K" : v}`} />
-                    <Tooltip contentStyle={{ background: "#060C14", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 11 }} labelStyle={{ color: COLORS.accent }} formatter={(v) => [`${(v/1e6).toFixed(1)}M`, "Volume"]} />
-                    <Bar dataKey="volume" fill={COLORS.accent} opacity={0.6} radius={[2,2,0,0]} />
-                  </BarChart>
-                ) : (
-                  <AreaChart data={displayData} margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={priceColor} stopOpacity={0.25} />
-                        <stop offset="95%" stopColor={priceColor} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} vertical={false} />
-                    <XAxis dataKey="date" tick={{ fill: COLORS.muted, fontSize: 10, fontFamily: "Space Mono" }} tickLine={false} axisLine={false} interval={Math.floor(displayData.length / 8)} />
-                    <YAxis tick={{ fill: COLORS.muted, fontSize: 10, fontFamily: "Space Mono" }} tickLine={false} axisLine={false} orientation="right" domain={["auto", "auto"]} tickFormatter={v => `${cur}${v >= 1000 ? (v/1000).toFixed(1)+"K" : v}`} />
-                    <Tooltip contentStyle={{ background: "#060C14", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 11, fontFamily: "Space Grotesk" }} labelStyle={{ color: COLORS.accent, fontWeight: 700 }} formatter={(v, name) => [v ? `${cur}${v.toLocaleString("en-IN")}` : "—", name]} />
-                    <Area type="monotone" dataKey="close" stroke={priceColor} fill="url(#priceGrad)" strokeWidth={2} dot={false} name="Price" />
-                    {overlay === "ema" && <>
-                      <Line type="monotone" dataKey="ema20"  stroke="#00B4D8" strokeWidth={1.2} dot={false} name="EMA20" />
-                      <Line type="monotone" dataKey="ema50"  stroke={COLORS.gold} strokeWidth={1.5} dot={false} name="EMA50" />
-                      <Line type="monotone" dataKey="ema200" stroke={COLORS.purple} strokeWidth={1.8} dot={false} name="EMA200" />
-                    </>}
-                    {overlay === "bb" && <>
-                      <Line type="monotone" dataKey="bbU" stroke="#4A5568" strokeWidth={1} dot={false} strokeDasharray="4 2" name="BB Upper" />
-                      <Line type="monotone" dataKey="bbM" stroke="#718096" strokeWidth={1} dot={false} strokeDasharray="4 2" name="BB Mid" />
-                      <Line type="monotone" dataKey="bbL" stroke="#4A5568" strokeWidth={1} dot={false} strokeDasharray="4 2" name="BB Lower" />
-                    </>}
-                  </AreaChart>
-                )}
-              </ResponsiveContainer>
-            </div>
-
-            {/* Legend */}
-            {overlay === "ema" && chartMode !== "bar" && (
-              <div style={{ display: "flex", gap: 16, marginTop: 8, paddingLeft: 8 }}>
-                {[["EMA20","#00B4D8"],["EMA50",COLORS.gold],["EMA200",COLORS.purple]].map(([lbl, col]) => (
-                  <div key={lbl} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                    <div style={{ width: 20, height: 2, background: col, borderRadius: 1 }} />
-                    <span style={{ color: COLORS.muted, fontSize: 10, fontWeight: 600 }}>{lbl}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Volume mini */}
-            <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "10px 8px", marginTop: 10 }}>
-              <div style={{ color: COLORS.muted, fontSize: 9, letterSpacing: 1.5, fontWeight: 700, marginBottom: 4, paddingLeft: 8 }}>VOLUME</div>
-              <ResponsiveContainer width="100%" height={55}>
-                <BarChart data={displayData} margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
-                  <Bar dataKey="volume" fill={COLORS.accent} opacity={0.4} radius={[1,1,0,0]} />
-                  <XAxis hide /><YAxis hide />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        )}
-
-        {/* ══════ TAB: TECHNICALS ══════ */}
-        {tab === "tech" && (
-          <div className="slide-in">
-            {/* Signal grid */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10, marginBottom: 20 }}>
-              {[
-                { label: "RSI (14)", value: last.rsi?.toFixed(1) ?? "—", signal: last.rsi > 70 ? "OVERBOUGHT" : last.rsi < 30 ? "OVERSOLD" : "NEUTRAL", color: last.rsi > 70 ? COLORS.red : last.rsi < 30 ? COLORS.green : COLORS.accent, mini: enriched.filter(d=>d.rsi).slice(-30).map(d=>d.rsi) },
-                { label: "MACD", value: last.macd?.toFixed(3) ?? "—", signal: last.macd > last.signal ? "BULLISH" : "BEARISH", color: last.macd > last.signal ? COLORS.green : COLORS.red, mini: enriched.filter(d=>d.macd).slice(-30).map(d=>d.macd) },
-                { label: "EMA 50", value: `${cur}${last.ema50?.toFixed(0) ?? "—"}`, signal: last.close > last.ema50 ? "ABOVE ▲" : "BELOW ▼", color: last.close > last.ema50 ? COLORS.green : COLORS.red, mini: enriched.filter(d=>d.ema50).slice(-30).map(d=>d.ema50) },
-                { label: "EMA 200", value: `${cur}${last.ema200?.toFixed(0) ?? "—"}`, signal: last.ema50 > last.ema200 ? "GOLDEN X" : "DEATH X", color: last.ema50 > last.ema200 ? COLORS.gold : COLORS.red, mini: enriched.filter(d=>d.ema200).slice(-30).map(d=>d.ema200) },
-                { label: "BB %B", value: last.bbU && last.bbL ? `${((last.close - last.bbL)/(last.bbU - last.bbL)*100).toFixed(0)}%` : "—", signal: last.close > last.bbU ? "UPPER BAND" : last.close < last.bbL ? "LOWER BAND" : "MID BAND", color: last.close > last.bbU ? COLORS.red : last.close < last.bbL ? COLORS.green : COLORS.accent, mini: enriched.filter(d=>d.bbU).slice(-30).map(d=>d.close) },
-                { label: "Volume", value: `${(last.volume/1e6).toFixed(1)}M`, signal: "AVERAGE", color: COLORS.purple, mini: enriched.slice(-30).map(d=>d.volume/1e6) },
-              ].map(({ label, value, signal, color, mini }) => (
-                <div key={label} className="metric-card" style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "14px 14px 10px" }}>
-                  <div style={{ color: COLORS.muted, fontSize: 9, letterSpacing: 1.5, fontWeight: 700 }}>{label}</div>
-                  <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 18, fontWeight: 700, color, margin: "6px 0 2px" }}>{value}</div>
-                  <div style={{ fontSize: 9, fontWeight: 800, color, letterSpacing: 1 }}>{signal}</div>
-                  <div style={{ marginTop: 8 }}><Sparkline data={mini} color={color} height={32} /></div>
-                </div>
-              ))}
-            </div>
-
-            {/* RSI Chart */}
-            <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "16px 8px", marginBottom: 12 }}>
-              <div style={{ color: COLORS.muted, fontSize: 10, letterSpacing: 2, fontWeight: 700, paddingLeft: 8, marginBottom: 8 }}>RSI (14) — RELATIVE STRENGTH INDEX</div>
-              <ResponsiveContainer width="100%" height={140}>
-                <AreaChart data={displayData.filter(d => d.rsi)} margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="rsiGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={COLORS.accent} stopOpacity={0.2} />
-                      <stop offset="95%" stopColor={COLORS.accent} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} vertical={false} />
-                  <XAxis dataKey="date" tick={{ fill: COLORS.muted, fontSize: 9 }} tickLine={false} axisLine={false} interval={Math.floor(displayData.length / 6)} />
-                  <YAxis domain={[0, 100]} tick={{ fill: COLORS.muted, fontSize: 9 }} tickLine={false} axisLine={false} orientation="right" ticks={[20,30,50,70,80]} />
-                  <Tooltip contentStyle={{ background: "#060C14", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 11 }} formatter={v => [`${v.toFixed(1)}`, "RSI"]} />
-                  <ReferenceLine y={70} stroke={COLORS.red} strokeDasharray="4 2" strokeWidth={1} />
-                  <ReferenceLine y={30} stroke={COLORS.green} strokeDasharray="4 2" strokeWidth={1} />
-                  <ReferenceLine y={50} stroke={COLORS.border} strokeDasharray="2 2" strokeWidth={1} />
-                  <Area type="monotone" dataKey="rsi" stroke={COLORS.accent} fill="url(#rsiGrad)" strokeWidth={1.5} dot={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* MACD Chart */}
-            <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "16px 8px" }}>
-              <div style={{ color: COLORS.muted, fontSize: 10, letterSpacing: 2, fontWeight: 700, paddingLeft: 8, marginBottom: 8 }}>MACD (12, 26, 9) — MOMENTUM</div>
-              <ResponsiveContainer width="100%" height={140}>
-                <BarChart data={displayData.filter(d => d.hist)} margin={{ top: 0, right: 20, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={COLORS.border} vertical={false} />
-                  <XAxis dataKey="date" tick={{ fill: COLORS.muted, fontSize: 9 }} tickLine={false} axisLine={false} interval={Math.floor(displayData.length / 6)} />
-                  <YAxis tick={{ fill: COLORS.muted, fontSize: 9 }} tickLine={false} axisLine={false} orientation="right" />
-                  <Tooltip contentStyle={{ background: "#060C14", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 11 }} formatter={v => [`${v?.toFixed(4)}`, "Histogram"]} />
-                  <ReferenceLine y={0} stroke={COLORS.border} strokeWidth={1} />
-                  <Bar dataKey="hist" fill={COLORS.green} radius={[1,1,0,0]} 
-                       label={false}
-                       isAnimationActive={false}>
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        )}
-
-        {/* ══════ TAB: AI RATING ══════ */}
-        {tab === "rating" && (
-          <div className="slide-in">
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 16, marginBottom: 16 }}>
-              {/* Gauge */}
-              <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 20, textAlign: "center" }}>
-                <div style={{ color: COLORS.muted, fontSize: 9, letterSpacing: 2, fontWeight: 700, marginBottom: 12 }}>NEXUS COMPOSITE SCORE</div>
-                <ScoreGauge score={totalScore} verdict={verdict} />
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginTop: 16 }}>
-                  {[["TECHNICAL", Math.round(techScore), 40], ["FUNDAMENTAL", Math.round(fundScore), 40], ["GROWTH", Math.round(grwScore), 20]].map(([lbl, sc, mx]) => (
-                    <div key={lbl} style={{ background: COLORS.bg, borderRadius: 8, padding: "10px 6px" }}>
-                      <div style={{ color: COLORS.muted, fontSize: 8, letterSpacing: 1, fontWeight: 700 }}>{lbl}</div>
-                      <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 16, fontWeight: 700, color: COLORS.accent, marginTop: 2 }}>{sc}<span style={{ fontSize: 9, color: COLORS.muted }}>/{mx}</span></div>
-                      <div style={{ height: 3, background: COLORS.border, borderRadius: 2, marginTop: 6 }}>
-                        <div style={{ height: 3, width: `${sc/mx*100}%`, background: COLORS.accent, borderRadius: 2 }} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Target prices */}
-                <div style={{ marginTop: 16 }}>
-                  <div style={{ color: COLORS.muted, fontSize: 9, letterSpacing: 2, fontWeight: 700, marginBottom: 8 }}>1-YEAR PRICE TARGETS</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-                    {[["BEAR", last.close * 0.88, COLORS.red], ["BASE", last.close * 1.15, COLORS.gold], ["BULL", last.close * 1.28, COLORS.green]].map(([lbl, tp, col]) => (
-                      <div key={lbl} style={{ background: COLORS.bg, borderRadius: 8, padding: "8px 4px" }}>
-                        <div style={{ color: col, fontSize: 8, fontWeight: 800, letterSpacing: 1 }}>{lbl}</div>
-                        <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 12, color: col, fontWeight: 700 }}>{cur}{tp.toFixed(0)}</div>
-                        <div style={{ fontSize: 9, color: COLORS.muted }}>{((tp/last.close-1)*100).toFixed(0)}%</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Score breakdown */}
-              <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 20 }}>
-                <div style={{ color: COLORS.muted, fontSize: 9, letterSpacing: 2, fontWeight: 700, marginBottom: 14 }}>SCORING BREAKDOWN</div>
-                {[
-                  { cat: "📈 TECHNICAL", items: [
-                    { lbl: `RSI: ${last.rsi?.toFixed(1)}`, score: rsiScore, max: 12 },
-                    { lbl: `MACD: ${last.macd > last.signal ? "Bull" : "Bear"}`, score: macdScore, max: 14 },
-                    { lbl: `EMA50: ${last.close > last.ema50 ? "Above" : "Below"}`, score: emaScore, max: 8 },
-                    { lbl: `Cross: ${last.ema50 > last.ema200 ? "Golden" : "Death"}`, score: gxScore, max: 6 },
-                  ]},
-                  { cat: "🏦 FUNDAMENTAL", items: [
-                    { lbl: `ROE: ${roe.toFixed(1)}%`, score: roeScore, max: 15 },
-                    { lbl: `Debt/Eq: ${debt}`, score: debtScore, max: 12 },
-                    { lbl: `Net Margin: ${margin}%`, score: margScore, max: 8 },
-                    { lbl: `Current Ratio: ${curRat}`, score: curScore, max: 5 },
-                  ]},
-                  { cat: "🚀 GROWTH", items: [
-                    { lbl: `Rev Growth: ${revGrw}%`, score: revScore, max: 10 },
-                    { lbl: `EPS Growth: ${epsGrw}%`, score: epsScore, max: 10 },
-                  ]},
-                ].map(({ cat, items }) => (
-                  <div key={cat} style={{ marginBottom: 14 }}>
-                    <div style={{ fontSize: 10, fontWeight: 800, color: COLORS.text, letterSpacing: 0.5, marginBottom: 6 }}>{cat}</div>
-                    {items.map(({ lbl, score, max }) => (
-                      <div key={lbl} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
-                        <div style={{ color: COLORS.muted, fontSize: 10, width: 140 }}>{lbl}</div>
-                        <div style={{ flex: 1, height: 4, background: COLORS.border, borderRadius: 2 }}>
-                          <div style={{ height: 4, width: `${score/max*100}%`, background: score/max > 0.6 ? COLORS.green : score/max > 0.3 ? COLORS.gold : COLORS.red, borderRadius: 2 }} />
-                        </div>
-                        <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 10, color: COLORS.text, width: 36, textAlign: "right" }}>{score.toFixed(0)}/{max}</div>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* AI Analysis */}
-            <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 20 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                <div style={{ color: COLORS.muted, fontSize: 9, letterSpacing: 2, fontWeight: 700 }}>◆ AI DEEP ANALYSIS — POWERED BY CLAUDE</div>
-                <button onClick={runAI} disabled={aiLoading} style={{ padding: "8px 18px", borderRadius: 7, fontSize: 11, fontWeight: 800, fontFamily: "inherit", background: `linear-gradient(135deg, ${COLORS.accent}22, ${COLORS.purple}22)`, border: `1px solid ${COLORS.accent}44`, color: COLORS.accent, opacity: aiLoading ? 0.6 : 1 }}>
-                  {aiLoading ? "⟳ ANALYZING..." : "⚡ RUN AI ANALYSIS"}
-                </button>
-              </div>
-
-              {aiLoading && (
-                <div style={{ textAlign: "center", padding: "30px 0" }}>
-                  <div style={{ color: COLORS.accent, fontSize: 12, letterSpacing: 2 }} className="pulse">NEXUS AI IS PROCESSING MARKET DATA...</div>
-                </div>
-              )}
-
-              {aiData && !aiLoading && (
-                <div className="slide-in">
-                  <div style={{ background: `${verdictColor}10`, border: `1px solid ${verdictColor}30`, borderRadius: 10, padding: "14px 18px", marginBottom: 14 }}>
-                    <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 18, fontWeight: 700, color: verdictColor }}>{aiData.verdict} · {aiData.score}/100</div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: COLORS.text, marginTop: 4 }}>{aiData.headline}</div>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-                    {[["📈 TECHNICAL", aiData.technical], ["🏦 FUNDAMENTAL", aiData.fundamental]].map(([lbl, txt]) => (
-                      <div key={lbl} style={{ background: COLORS.bg, borderRadius: 8, padding: 14 }}>
-                        <div style={{ fontSize: 9, letterSpacing: 1.5, fontWeight: 700, color: COLORS.accent, marginBottom: 6 }}>{lbl}</div>
-                        <div style={{ fontSize: 12, color: COLORS.text, lineHeight: 1.6 }}>{txt}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ background: `${COLORS.red}0D`, border: `1px solid ${COLORS.red}22`, borderRadius: 8, padding: 12, marginBottom: 12 }}>
-                    <div style={{ fontSize: 9, letterSpacing: 1.5, fontWeight: 700, color: COLORS.red, marginBottom: 4 }}>⚠ KEY RISK</div>
-                    <div style={{ fontSize: 12, color: COLORS.text }}>{aiData.risk}</div>
-                  </div>
-                  {aiData.catalysts && (
-                    <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 9, letterSpacing: 1.5, fontWeight: 700, color: COLORS.gold, marginBottom: 8 }}>🎯 CATALYSTS</div>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        {aiData.catalysts.map((c, i) => (
-                          <div key={i} style={{ background: `${COLORS.gold}10`, border: `1px solid ${COLORS.gold}30`, borderRadius: 6, padding: "5px 12px", fontSize: 11, color: COLORS.gold }}>{c}</div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div style={{ background: COLORS.bg, borderRadius: 8, padding: 14 }}>
-                    <div style={{ fontSize: 9, letterSpacing: 1.5, fontWeight: 700, color: COLORS.muted, marginBottom: 6 }}>AI SUMMARY</div>
-                    <div style={{ fontSize: 12, color: COLORS.text, lineHeight: 1.7 }}>{aiData.summary}</div>
-                  </div>
-                </div>
-              )}
-
-              {!aiData && !aiLoading && (
-                <div style={{ textAlign: "center", padding: "24px 0", color: COLORS.muted, fontSize: 12 }}>
-                  Click "RUN AI ANALYSIS" to get Claude's deep market analysis for {meta.name}
-                </div>
-              )}
-
-              {/* Ask AI */}
-              <div style={{ marginTop: 16, borderTop: `1px solid ${COLORS.border}`, paddingTop: 14 }}>
-                <div style={{ fontSize: 9, letterSpacing: 1.5, fontWeight: 700, color: COLORS.muted, marginBottom: 8 }}>ASK AI A SPECIFIC QUESTION</div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input value={aiQ} onChange={e => setAiQ(e.target.value)} placeholder={`Ask about ${meta.name}...`} style={{ flex: 1, background: COLORS.bg, border: `1px solid ${COLORS.border}`, borderRadius: 7, padding: "9px 14px", color: COLORS.text, fontSize: 12, fontFamily: "inherit" }} />
-                  <button onClick={askAI} disabled={aiQLoading} style={{ padding: "9px 18px", borderRadius: 7, fontSize: 11, fontWeight: 700, fontFamily: "inherit", background: `${COLORS.purple}22`, border: `1px solid ${COLORS.purple}44`, color: COLORS.purple, opacity: aiQLoading ? 0.6 : 1 }}>
-                    {aiQLoading ? "..." : "ASK"}
-                  </button>
-                </div>
-                {aiAnswer && <div style={{ marginTop: 10, background: COLORS.bg, borderRadius: 8, padding: 14, fontSize: 12, color: COLORS.text, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{aiAnswer}</div>}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ══════ TAB: FINANCIALS ══════ */}
-        {tab === "fin" && (
-          <div className="slide-in">
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 16 }}>
-              {[
-                { title: "INCOME", icon: "◉", metrics: [
-                  ["Revenue (TTM)", fmtNum(mcap * 0.3, cur)],
-                  ["Net Profit",   fmtNum(mcap * 0.3 * margin/100, cur)],
-                  ["Gross Profit", fmtNum(mcap * 0.3 * 0.45, cur)],
-                  ["EBITDA",       fmtNum(mcap * 0.3 * 0.22, cur)],
-                  ["Free Cash Flow", fmtNum(mcap * 0.3 * 0.15, cur)],
-                  ["Operating CF",   fmtNum(mcap * 0.3 * 0.18, cur)],
-                ]},
-                { title: "VALUATION", icon: "◈", metrics: [
-                  ["Market Cap",    fmtNum(mcap, cur)],
-                  ["Ent. Value",    fmtNum(mcap * 1.1, cur)],
-                  ["P/E (TTM)",     pe.toString()],
-                  ["P/B Ratio",     pb.toString()],
-                  ["EV/EBITDA",     (pe * 0.9).toFixed(1)],
-                  ["Div Yield",     `${divYld}%`],
-                ]},
-                { title: "HEALTH", icon: "⟡", metrics: [
-                  ["ROE",          `${roe.toFixed(1)}%`],
-                  ["ROA",          `${(roe * 0.6).toFixed(1)}%`],
-                  ["Debt/Equity",  debt.toString()],
-                  ["Total Debt",   fmtNum(mcap * 0.4, cur)],
-                  ["Cash & Eq.",   fmtNum(mcap * 0.12, cur)],
-                  ["Current Ratio", curRat.toString()],
-                ]},
-              ].map(({ title, icon, metrics }) => (
-                <div key={title} style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 18 }}>
-                  <div style={{ fontSize: 9, letterSpacing: 2, fontWeight: 700, color: COLORS.accent, marginBottom: 14 }}>{icon} {title}</div>
-                  {metrics.map(([lbl, val]) => (
-                    <div key={lbl} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: `1px solid ${COLORS.border}` }}>
-                      <span style={{ color: COLORS.muted, fontSize: 11, fontWeight: 600 }}>{lbl}</span>
-                      <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 12, color: COLORS.text, fontWeight: 700 }}>{val}</span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-
-            {/* Per share */}
-            <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 18 }}>
-              <div style={{ fontSize: 9, letterSpacing: 2, fontWeight: 700, color: COLORS.accent, marginBottom: 14 }}>◎ PER SHARE METRICS</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10 }}>
-                {[
-                  ["EPS (TTM)",  `${cur}${(last.close/pe).toFixed(2)}`],
-                  ["EPS (Fwd)", `${cur}${(last.close/pe*1.12).toFixed(2)}`],
-                  ["Book Value",`${cur}${(last.close/pb).toFixed(2)}`],
-                  ["Div/Share", `${cur}${(last.close * divYld / 100).toFixed(2)}`],
-                  ["Div Yield",  `${divYld}%`],
-                ].map(([lbl, val]) => (
-                  <div key={lbl} className="metric-card" style={{ background: COLORS.bg, borderRadius: 10, padding: "14px 12px", border: `1px solid ${COLORS.border}`, textAlign: "center" }}>
-                    <div style={{ color: COLORS.muted, fontSize: 9, letterSpacing: 1.5, fontWeight: 700 }}>{lbl}</div>
-                    <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 16, color: COLORS.accent, fontWeight: 700, marginTop: 6 }}>{val}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Growth bars */}
-              <div style={{ marginTop: 18, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                {[["Revenue Growth", revGrw], ["EPS Growth", epsGrw], ["Net Margin", margin], ["ROE", roe]].map(([lbl, val]) => (
-                  <div key={lbl}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                      <span style={{ color: COLORS.muted, fontSize: 10, fontWeight: 600 }}>{lbl}</span>
-                      <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 11, color: val > 0 ? COLORS.green : COLORS.red, fontWeight: 700 }}>{val > 0 ? "+" : ""}{val.toFixed(1)}%</span>
-                    </div>
-                    <div style={{ height: 5, background: COLORS.border, borderRadius: 3 }}>
-                      <div style={{ height: 5, width: `${Math.min(100, Math.abs(val) * 2.5)}%`, background: val > 0 ? COLORS.green : COLORS.red, borderRadius: 3 }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ══════ TAB: HOLDINGS ══════ */}
-        {tab === "hold" && (
-          <div className="slide-in" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-            <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 20 }}>
-              <div style={{ fontSize: 9, letterSpacing: 2, fontWeight: 700, color: COLORS.accent, marginBottom: 16 }}>◎ SHAREHOLDING PATTERN</div>
-              <div style={{ display: "flex", justifyContent: "center" }}>
-                <PieChart width={220} height={220}>
-                  <Pie data={pieData} cx={105} cy={105} innerRadius={60} outerRadius={95} dataKey="value" stroke="none">
-                    {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                  </Pie>
-                  <Tooltip contentStyle={{ background: "#060C14", border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 11 }} formatter={v => [`${v}%`, ""]} />
-                </PieChart>
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
-                {pieData.map(({ name, value, color }) => (
-                  <div key={name} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: 2, background: color, flexShrink: 0 }} />
-                    <div>
-                      <div style={{ color: COLORS.muted, fontSize: 9 }}>{name}</div>
-                      <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 13, color, fontWeight: 700 }}>{value}%</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 20 }}>
-              <div style={{ fontSize: 9, letterSpacing: 2, fontWeight: 700, color: COLORS.accent, marginBottom: 16 }}>◈ INSTITUTIONAL DETAILS</div>
-              {[
-                ["Promoter Holding", `${promoter.toFixed(2)}%`, COLORS.green],
-                ["FII / FPI",        `${fii.toFixed(2)}%`,      COLORS.accent],
-                ["DII",              `${dii.toFixed(2)}%`,       COLORS.gold],
-                ["Public",           `${pubSH.toFixed(2)}%`,     COLORS.purple],
-                ["Pledged Shares",   `${(Math.random()*15).toFixed(2)}%`, COLORS.red],
-                ["Shares Outstanding", `${(mcap/last.close/1e7).toFixed(2)} Cr`, COLORS.text],
-              ].map(([lbl, val, col]) => (
-                <div key={lbl} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${COLORS.border}` }}>
-                  <span style={{ color: COLORS.muted, fontSize: 11, fontWeight: 600 }}>{lbl}</span>
-                  <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 12, color: col, fontWeight: 700 }}>{val}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ══════ TAB: PORTFOLIO ══════ */}
-        {tab === "port" && (
-          <div className="slide-in">
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
-              {(() => {
-                let totalInv = 0, totalCur = 0;
-                portfolio.forEach(h => {
-                  const d = generateStockData(h.symbol, 5);
-                  totalInv += h.qty * h.avg;
-                  totalCur += h.qty * d.last.close;
-                });
-                const pnl = totalCur - totalInv;
-                const pct = (pnl / totalInv * 100);
-                return [
-                  ["INVESTED", fmtNum(totalInv, "₹"), COLORS.accent],
-                  ["CURRENT VALUE", fmtNum(totalCur, "₹"), pnl >= 0 ? COLORS.green : COLORS.red],
-                  ["TOTAL P&L", `${pnl >= 0 ? "+" : ""}${fmtNum(Math.abs(pnl), "₹")} (${pct.toFixed(1)}%)`, pnl >= 0 ? COLORS.green : COLORS.red],
-                ].map(([lbl, val, col]) => (
-                  <div key={lbl} style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "18px 20px" }}>
-                    <div style={{ color: COLORS.muted, fontSize: 9, letterSpacing: 2, fontWeight: 700 }}>{lbl}</div>
-                    <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 18, color: col, fontWeight: 700, marginTop: 6 }}>{val}</div>
-                  </div>
-                ));
-              })()}
-            </div>
-
-            <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 18 }}>
-              <div style={{ fontSize: 9, letterSpacing: 2, fontWeight: 700, color: COLORS.accent, marginBottom: 14 }}>◐ HOLDINGS</div>
-              {portfolio.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "30px 0", color: COLORS.muted }}>No holdings. Add stocks via the + PORTFOLIO button.</div>
-              ) : portfolio.map((h, i) => {
-                const d = generateStockData(h.symbol, 5);
-                const ltp = d.last.close;
-                const pnl = (ltp - h.avg) * h.qty;
-                const pct = (ltp - h.avg) / h.avg * 100;
-                const isPos = pnl >= 0;
-                return (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 16, padding: "14px 0", borderBottom: `1px solid ${COLORS.border}` }}>
-                    <div style={{ width: 36, height: 36, background: `${isPos ? COLORS.green : COLORS.red}15`, border: `1px solid ${isPos ? COLORS.green : COLORS.red}33`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, color: isPos ? COLORS.green : COLORS.red, flexShrink: 0 }}>
-                      {isPos ? "▲" : "▼"}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 13 }}>{h.symbol.replace(".NS","").replace(".BO","")}</div>
-                      <div style={{ color: COLORS.muted, fontSize: 10 }}>Qty: {h.qty} · Avg: {d.cur}{h.avg.toFixed(0)} · LTP: {d.cur}{ltp.toFixed(0)}</div>
-                    </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 13, fontWeight: 700, color: isPos ? COLORS.green : COLORS.red }}>
-                        {isPos ? "+" : ""}{d.cur}{Math.abs(pnl).toFixed(0)}
-                      </div>
-                      <div style={{ fontSize: 11, color: isPos ? COLORS.green : COLORS.red }}>{pct.toFixed(1)}%</div>
-                    </div>
-                    <button onClick={() => setPortfolio(portfolio.filter((_, j) => j !== i))} style={{ background: `${COLORS.red}15`, border: `1px solid ${COLORS.red}30`, color: COLORS.red, borderRadius: 6, padding: "4px 10px", fontSize: 11, fontFamily: "inherit" }}>✕</button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* FOOTER */}
-        <div style={{ marginTop: 32, borderTop: `1px solid ${COLORS.border}`, paddingTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 9, color: COLORS.muted, letterSpacing: 2 }}>NEXUS ANALYTICS PRO · EDUCATIONAL USE ONLY · NOT FINANCIAL ADVICE</div>
-          <div style={{ fontSize: 9, color: COLORS.muted, letterSpacing: 1 }}>DATA IS SIMULATED FOR DEMONSTRATION · Powered by Claude AI</div>
-        </div>
-      </div>
+# =============================================================
+# 4. AUTHENTICATION
+# =============================================================
+if not st.session_state['is_logged_in']:
+    st.markdown("""
+    <div style="text-align:center; padding: 60px 0 40px;">
+        <p class="main-title">TAMIL INVEST HUB PRO</p>
+        <p class="sub-title">Tamil Investment Platform - Created by Somasundaram</p>
     </div>
-  );
-}
+    """, unsafe_allow_html=True)
+
+    col = st.columns([1, 1.5, 1])[1]
+    with col:
+        st.markdown('<div class="section-card">', unsafe_allow_html=True)
+        st.markdown(
+            '<p style="text-align:center; font-size:20px; font-weight:800; '
+            'color:#00D4FF; margin-bottom:16px;">Login</p>',
+            unsafe_allow_html=True
+        )
+        u = st.text_input("User ID / Email")
+        p = st.text_input("Password", type="password")
+        if st.button("ACCESS HUB", use_container_width=True):
+            if u.strip() and p.strip():
+                st.session_state['is_logged_in'] = True
+                st.session_state['username'] = u.strip()
+                st.rerun()
+            else:
+                st.error("User ID மற்றும் Password உள்ளிடவும்!")
+        st.markdown('</div>', unsafe_allow_html=True)
+    st.stop()
+
+# =============================================================
+# 5. HELPER FUNCTIONS
+# =============================================================
+def calc_rsi(series, window=14):
+    delta = series.diff()
+    gain = delta.where(delta > 0, 0).rolling(window).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window).mean()
+    rs = gain / loss.replace(0, np.nan)
+    return 100 - (100 / (1 + rs))
+
+def calc_macd(series, fast=12, slow=26, signal=9):
+    ema_f = series.ewm(span=fast, adjust=False).mean()
+    ema_s = series.ewm(span=slow, adjust=False).mean()
+    macd  = ema_f - ema_s
+    sig   = macd.ewm(span=signal, adjust=False).mean()
+    return macd, sig, macd - sig
+
+def calc_bb(series, w=20, s=2):
+    sma = series.rolling(w).mean()
+    std = series.rolling(w).std()
+    return sma + s * std, sma, sma - s * std
+
+def fmt_cr(v):
+    if not v:
+        return "N/A"
+    if abs(v) >= 1e12:
+        return f"Rs.{v/1e12:.2f} L.Cr"
+    return f"Rs.{v/1e7:,.2f} Cr"
+
+def fmt_pct(v):
+    return f"{v*100:.2f}%" if v else "N/A"
+
+def safe(v, d=2):
+    if v is None or (isinstance(v, float) and np.isnan(v)):
+        return "N/A"
+    return f"{v:,.{d}f}" if isinstance(v, float) else str(v)
+
+@st.cache_data(ttl=180, show_spinner=False)
+def fetch_data(sym, period):
+    t = yf.Ticker(sym)
+    info = dict(t.info)
+    hist = t.history(period=period)
+    try:
+        actions = t.actions
+    except Exception:
+        actions = pd.DataFrame()
+    try:
+        news = t.news[:8]
+    except Exception:
+        news = []
+    return info, hist, actions, news
+
+# =============================================================
+# 6. SIDEBAR
+# =============================================================
+with st.sidebar:
+    st.markdown(
+        f'<p style="font-family:Orbitron,monospace; font-size:15px; '
+        f'color:#39FF14; font-weight:900; letter-spacing:2px;">PORTFOLIO</p>',
+        unsafe_allow_html=True
+    )
+    st.markdown(
+        f'<p style="color:#5a7a9a; font-size:12px;">User: {st.session_state["username"]}</p>',
+        unsafe_allow_html=True
+    )
+
+    with st.expander("Add Holding"):
+        ps = st.text_input("Symbol", value="SBIN", key="p_sym").upper().strip()
+        pq = st.number_input("Qty", min_value=1, value=10, key="p_qty")
+        pp = st.number_input("Avg Price (Rs.)", min_value=0.0, value=100.0, step=0.5, key="p_price")
+        if st.button("Add", use_container_width=True):
+            sym = ps if "." in ps else f"{ps}.NS"
+            existing = [h for h in st.session_state['portfolio'] if h['symbol'] == sym]
+            if existing:
+                old = existing[0]
+                total_qty = old['qty'] + pq
+                old['avg_price'] = (old['avg_price'] * old['qty'] + pp * pq) / total_qty
+                old['qty'] = total_qty
+            else:
+                st.session_state['portfolio'].append({
+                    'symbol': sym, 'qty': pq, 'avg_price': pp
+                })
+            st.success(f"{ps} சேர்க்கப்பட்டது!")
+            st.rerun()
+
+    if st.session_state['portfolio']:
+        total_inv = total_cur = 0.0
+        for h in st.session_state['portfolio']:
+            try:
+                ltp = yf.Ticker(h['symbol']).fast_info.get('last_price') or 0
+            except Exception:
+                ltp = 0
+            inv = h['avg_price'] * h['qty']
+            cur = ltp * h['qty']
+            pnl = cur - inv
+            pct = pnl / inv * 100 if inv else 0
+            total_inv += inv
+            total_cur += cur
+            clr = "#39FF14" if pnl >= 0 else "#FF4455"
+            arr = "Up" if pnl >= 0 else "Down"
+            st.markdown(f"""
+            <div style="background:#080f18; border-radius:10px; padding:10px 12px;
+                        margin-bottom:8px; border:1px solid #1a2535;">
+                <div style="display:flex; justify-content:space-between;">
+                    <span style="font-weight:800; font-size:14px; color:#dde6f0;">
+                        {h['symbol'].replace('.NS','').replace('.BO','')}
+                    </span>
+                    <span style="color:{clr}; font-weight:800; font-size:13px;">
+                        {arr} {abs(pct):.1f}%
+                    </span>
+                </div>
+                <div style="color:#5a7a9a; font-size:11px;">
+                    Qty: {h['qty']} | Avg: Rs.{h['avg_price']:.1f} | LTP: Rs.{ltp:.1f}
+                </div>
+                <div style="color:{clr}; font-size:12px; font-weight:700;">
+                    P&amp;L: Rs.{pnl:+,.0f}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        total_pnl = total_cur - total_inv
+        total_pct = total_pnl / total_inv * 100 if total_inv else 0
+        clr = "#39FF14" if total_pnl >= 0 else "#FF4455"
+        st.markdown(f"""
+        <div style="background:linear-gradient(135deg,#080f18,#0d1f0d); border-radius:12px;
+                    padding:14px; border:1px solid {clr}44; text-align:center; margin-top:4px;">
+            <div class="m-label">Total P&amp;L</div>
+            <div style="color:{clr}; font-family:Orbitron,monospace; font-size:20px; font-weight:900;">
+                Rs.{total_pnl:+,.0f}
+            </div>
+            <div style="color:{clr}; font-size:14px;">({total_pct:+.2f}%)</div>
+            <div style="color:#5a7a9a; font-size:11px; margin-top:4px;">
+                Invested: Rs.{total_inv:,.0f} | Current: Rs.{total_cur:,.0f}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("Clear All Holdings", use_container_width=True):
+            st.session_state['portfolio'] = []
+            st.rerun()
+    else:
+        st.info("இன்னும் holdings சேர்க்கவில்லை.")
+
+    st.markdown("---")
+
+    st.markdown(
+        '<p style="font-family:Orbitron,monospace; font-size:13px; '
+        'color:#00D4FF; font-weight:700;">WATCHLIST</p>',
+        unsafe_allow_html=True
+    )
+    wl_sym = st.text_input("Add to Watchlist", placeholder="INFY", key="wl_add")
+    if st.button("+ Watch", use_container_width=True):
+        s = wl_sym.upper().strip()
+        if s and s not in st.session_state['watchlist']:
+            st.session_state['watchlist'].append(s)
+            st.rerun()
+
+    if st.session_state['watchlist']:
+        wl_html = "".join([
+            f'<span class="watch-tag">{w}</span>'
+            for w in st.session_state['watchlist']
+        ])
+        st.markdown(wl_html, unsafe_allow_html=True)
+        if st.button("Clear Watchlist"):
+            st.session_state['watchlist'] = []
+            st.rerun()
+
+    st.markdown("---")
+    st.session_state['language'] = st.radio(
+        "Language / Mozhi", ["Tamil", "English"], horizontal=True
+    )
+    if st.button("Logout", use_container_width=True):
+        st.session_state['is_logged_in'] = False
+        st.rerun()
+
+# =============================================================
+# 7. HEADER
+# =============================================================
+st.markdown("""
+<div style="text-align:center; padding:12px 0 8px;">
+    <p class="main-title">TAMIL INVEST HUB PRO</p>
+    <p class="sub-title">Tamil Investment Platform - Created by Somasundaram - Live Market Data</p>
+</div>
+""", unsafe_allow_html=True)
+
+# =============================================================
+# 8. SEARCH BAR
+# =============================================================
+sc1, sc2, sc3 = st.columns([5, 1.5, 1.5])
+with sc1:
+    u_input = st.text_input(
+        get_text("Search Symbol (eg: SBIN, RELIANCE, TCS, NIFTY50.NS)",
+                 "Symbol தேடவும் (eg: SBIN, RELIANCE, TCS)"),
+        value="RELIANCE",
+        label_visibility="visible"
+    ).upper().strip()
+
+with sc2:
+    period_map = {"1M": "1mo", "3M": "3mo", "6M": "6mo", "1Y": "1y", "2Y": "2y", "5Y": "5y"}
+    period_label = st.selectbox(
+        get_text("Period", "Kalam"),
+        list(period_map.keys()),
+        index=3
+    )
+    period = period_map[period_label]
+
+with sc3:
+    exchange = st.selectbox(
+        get_text("Exchange", "Pangu Sandhai"),
+        ["NSE (.NS)", "BSE (.BO)", "Manual"]
+    )
+
+if exchange == "NSE (.NS)":
+    ticker_symbol = u_input if "." in u_input else f"{u_input}.NS"
+elif exchange == "BSE (.BO)":
+    ticker_symbol = u_input if "." in u_input else f"{u_input}.BO"
+else:
+    ticker_symbol = u_input
+
+# =============================================================
+# 9. TABS
+# =============================================================
+tabs = st.tabs([
+    get_text("Chart", "Vilai Varapadam"),
+    get_text("Indicators", "Thozilnutpam"),
+    get_text("Rating", "Rating"),
+    get_text("Financials", "Nidhinilai"),
+    get_text("Shareholding", "Panguthaarar"),
+    get_text("News", "Seithigal"),
+    get_text("Actions", "Nigazhvugal"),
+    get_text("About", "Niruvagam"),
+])
+
+# =============================================================
+# 10. DATA FETCH + INDICATORS
+# =============================================================
+try:
+    with st.spinner(get_text("Loading live data...", "Theravu Ertrugirathu...")):
+        info, hist, actions, news_list = fetch_data(ticker_symbol, period)
+
+    if hist.empty:
+        st.error(
+            f"'{ticker_symbol}' - theravu kidaikkavillai. "
+            f"Symbol saripaaarkavum."
+        )
+        st.stop()
+
+    close = hist['Close']
+    hist['RSI']         = calc_rsi(close)
+    hist['MACD'], hist['MACD_Sig'], hist['MACD_Hist'] = calc_macd(close)
+    hist['BB_U'], hist['BB_M'], hist['BB_L'] = calc_bb(close)
+    hist['EMA20']  = close.ewm(span=20).mean()
+    hist['EMA50']  = close.ewm(span=50).mean()
+    hist['EMA200'] = close.ewm(span=200).mean()
+    hist['ATR']    = (hist['High'] - hist['Low']).rolling(14).mean()
+
+    rsi_now    = hist['RSI'].iloc[-1]
+    macd_now   = hist['MACD'].iloc[-1]
+    sig_now    = hist['MACD_Sig'].iloc[-1]
+    macd_bull  = macd_now > sig_now
+    ltp        = (info.get('currentPrice')
+                  or info.get('regularMarketPrice')
+                  or float(close.iloc[-1]))
+    prev_c     = (info.get('regularMarketPreviousClose')
+                  or float(close.iloc[-2]))
+    day_chg    = ltp - prev_c
+    day_pct    = day_chg / prev_c * 100 if prev_c else 0
+    ema50_val  = hist['EMA50'].iloc[-1]
+    ema200_val = hist['EMA200'].iloc[-1]
+    ema_bull   = ltp > ema50_val if not np.isnan(ema50_val) else False
+    golden_x   = (ema50_val > ema200_val
+                  if not (np.isnan(ema50_val) or np.isnan(ema200_val))
+                  else False)
+    atr_val    = hist['ATR'].iloc[-1]
+    bb_u       = hist['BB_U'].iloc[-1]
+    bb_l       = hist['BB_L'].iloc[-1]
+    bb_pct     = ((ltp - bb_l) / (bb_u - bb_l) * 100
+                  if (bb_u - bb_l) else 50)
+
+    # ==========================================================
+    # TAB 0 - CANDLESTICK CHART
+    # ==========================================================
+    with tabs[0]:
+        name   = info.get('longName', ticker_symbol)
+        sector = info.get('sector', '')
+        st.markdown(
+            f'<div style="font-size:20px; font-weight:800; color:#dde6f0; '
+            f'margin-bottom:4px;">{name} '
+            f'<span style="font-size:13px; color:#5a7a9a;">| {sector}</span></div>',
+            unsafe_allow_html=True
+        )
+
+        chg_clr = "#39FF14" if day_chg >= 0 else "#FF4455"
+        arr     = "UP" if day_chg >= 0 else "DOWN"
+
+        st.markdown(f"""
+        <div class="price-card">
+            <div class="ltp-price">Rs.{ltp:,.2f}</div>
+            <div class="ltp-change" style="color:{chg_clr}; margin-top:6px;">
+                {arr} Rs.{abs(day_chg):.2f} ({day_pct:+.2f}%)
+            </div>
+            <div style="color:#5a7a9a; font-size:12px; margin-top:4px;">
+                {get_text('Day Range','Inru')}: Rs.{info.get('regularMarketDayLow',0):,.2f}
+                to Rs.{info.get('regularMarketDayHigh',0):,.2f}
+                | Vol: {info.get('regularMarketVolume',0):,}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        s1, s2, s3, s4, s5 = st.columns(5)
+        stats = [
+            ("52W High", f"Rs.{info.get('fiftyTwoWeekHigh',0):,.2f}", "green"),
+            ("52W Low",  f"Rs.{info.get('fiftyTwoWeekLow',0):,.2f}",  "red"),
+            ("Mkt Cap",  fmt_cr(info.get("marketCap")),               "blue"),
+            ("P/E",      safe(info.get("trailingPE")),                "gold"),
+            ("ATR(14)",  f"Rs.{atr_val:.2f}",                        ""),
+        ]
+        for col, (lbl, val, clr) in zip([s1, s2, s3, s4, s5], stats):
+            with col:
+                st.markdown(
+                    f'<div class="stat-card">'
+                    f'<div class="stat-label">{lbl}</div>'
+                    f'<div class="stat-value {clr}">{val}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+        st.markdown("")
+        ov1, ov2 = st.columns([4, 1])
+        with ov2:
+            show_ema = st.checkbox("EMA Lines",  value=True)
+            show_bb  = st.checkbox("Bollinger",  value=True)
+            show_vol = st.checkbox("Volume",     value=True)
+
+        rows_n = 2 if show_vol else 1
+        row_h  = [0.73, 0.27] if show_vol else [1]
+
+        fig = make_subplots(
+            rows=rows_n, cols=1, shared_xaxes=True,
+            vertical_spacing=0.02, row_heights=row_h
+        )
+
+        fig.add_trace(go.Candlestick(
+            x=hist.index,
+            open=hist['Open'], high=hist['High'],
+            low=hist['Low'],   close=hist['Close'],
+            increasing_line_color='#39FF14',
+            decreasing_line_color='#FF4455',
+            increasing_fillcolor='rgba(57,255,20,0.45)',
+            decreasing_fillcolor='rgba(255,68,85,0.45)',
+            name="Price"
+        ), row=1, col=1)
+
+        if show_ema:
+            for span, clr, w in [(20,'#00D4FF',1.2),(50,'#FFD700',1.5),(200,'#FF69B4',1.8)]:
+                k = f'EMA{span}'
+                if k in hist.columns:
+                    fig.add_trace(go.Scatter(
+                        x=hist.index, y=hist[k], name=f"EMA{span}",
+                        line=dict(color=clr, width=w)
+                    ), row=1, col=1)
+
+        if show_bb:
+            fig.add_trace(go.Scatter(
+                x=hist.index, y=hist['BB_U'], name="BB Up",
+                line=dict(color='rgba(150,150,150,0.5)', width=1, dash='dot'),
+                showlegend=False
+            ), row=1, col=1)
+            fig.add_trace(go.Scatter(
+                x=hist.index, y=hist['BB_L'], name="BB Lo",
+                line=dict(color='rgba(150,150,150,0.5)', width=1, dash='dot'),
+                fill='tonexty', fillcolor='rgba(150,150,150,0.04)',
+                showlegend=False
+            ), row=1, col=1)
+            fig.add_trace(go.Scatter(
+                x=hist.index, y=hist['BB_M'], name="BB Mid",
+                line=dict(color='rgba(100,100,100,0.6)', width=1, dash='dash'),
+                showlegend=False
+            ), row=1, col=1)
+
+        if show_vol:
+            vol_clr = [
+                'rgba(57,255,20,0.6)' if c >= o else 'rgba(255,68,85,0.6)'
+                for c, o in zip(hist['Close'], hist['Open'])
+            ]
+            fig.add_trace(go.Bar(
+                x=hist.index, y=hist['Volume'],
+                name="Volume", marker_color=vol_clr
+            ), row=2, col=1)
+            fig.update_yaxes(
+                title_text="Vol", row=2, col=1,
+                title_font=dict(size=10)
+            )
+
+        fig.update_layout(
+            template="plotly_dark",
+            paper_bgcolor='#020509',
+            plot_bgcolor='#080f18',
+            height=580,
+            margin=dict(t=10, b=10, l=8, r=8),
+            xaxis_rangeslider_visible=False,
+            legend=dict(orientation="h", yanchor="bottom", y=1.01, font=dict(size=11)),
+            font=dict(family="Exo 2")
+        )
+        fig.update_xaxes(gridcolor='#10192a', zeroline=False)
+        fig.update_yaxes(gridcolor='#10192a', zeroline=False)
+        st.plotly_chart(fig, use_container_width=True)
+
+    # ==========================================================
+    # TAB 1 - TECHNICAL INDICATORS
+    # ==========================================================
+    with tabs[1]:
+        st.markdown(
+            f"### {get_text('Technical Indicators','Thozilnutpa Kurikkattingal')}"
+        )
+
+        fig2 = make_subplots(
+            rows=2, cols=1, shared_xaxes=True,
+            vertical_spacing=0.1, row_heights=[0.5, 0.5],
+            subplot_titles=["RSI (14)", "MACD (12,26,9)"]
+        )
+
+        fig2.add_trace(go.Scatter(
+            x=hist.index, y=hist['RSI'], name="RSI",
+            line=dict(color='#00D4FF', width=2)
+        ), row=1, col=1)
+        fig2.add_hline(y=70, line_color='#FF4455', line_dash='dash', line_width=1.2, row=1, col=1)
+        fig2.add_hline(y=30, line_color='#39FF14', line_dash='dash', line_width=1.2, row=1, col=1)
+        fig2.add_hline(y=50, line_color='#444',    line_dash='dot',  line_width=1,   row=1, col=1)
+        fig2.add_hrect(y0=30, y1=70, fillcolor='rgba(255,255,255,0.015)', line_width=0, row=1, col=1)
+
+        hist_clr = [
+            'rgba(57,255,20,0.7)' if v >= 0 else 'rgba(255,68,85,0.7)'
+            for v in hist['MACD_Hist'].fillna(0)
+        ]
+        fig2.add_trace(go.Bar(
+            x=hist.index, y=hist['MACD_Hist'],
+            name="Histogram", marker_color=hist_clr, opacity=0.8
+        ), row=2, col=1)
+        fig2.add_trace(go.Scatter(
+            x=hist.index, y=hist['MACD'], name="MACD",
+            line=dict(color='#00D4FF', width=2)
+        ), row=2, col=1)
+        fig2.add_trace(go.Scatter(
+            x=hist.index, y=hist['MACD_Sig'], name="Signal",
+            line=dict(color='#FFD700', width=2)
+        ), row=2, col=1)
+
+        fig2.update_layout(
+            template="plotly_dark",
+            paper_bgcolor='#020509', plot_bgcolor='#080f18',
+            height=500, margin=dict(t=30, b=10, l=8, r=8),
+            font=dict(family="Exo 2"),
+            legend=dict(orientation="h", y=1.02, font=dict(size=11))
+        )
+        fig2.update_xaxes(gridcolor='#10192a')
+        fig2.update_yaxes(gridcolor='#10192a')
+        st.plotly_chart(fig2, use_container_width=True)
+
+        st.markdown(f"#### {get_text('Live Signal Summary','Neradi Samignai Surukkam')}")
+
+        rsi_zone = ("Overbought" if rsi_now > 70
+                    else ("Oversold" if rsi_now < 30 else "Neutral"))
+        rsi_bcls = ("badge-red" if rsi_now > 70
+                    else ("badge-green" if rsi_now < 30 else "badge-blue"))
+        bb_zone  = ("Near Upper" if bb_pct > 80
+                    else ("Near Lower" if bb_pct < 20 else "Mid Band"))
+        bb_bcls  = ("badge-red" if bb_pct > 80
+                    else ("badge-green" if bb_pct < 20 else "badge-blue"))
+        gx_txt   = "Golden Cross" if golden_x else "Death Cross"
+        gx_bcls  = "badge-gold" if golden_x else "badge-red"
+
+        ind_cards = [
+            ("RSI (14)",     f"{rsi_now:.1f}",    rsi_zone,                                           rsi_bcls),
+            ("MACD",         f"{macd_now:.3f}",   "Bullish" if macd_bull else "Bearish",              "badge-green" if macd_bull else "badge-red"),
+            ("Bollinger %B", f"{bb_pct:.1f}%",    bb_zone,                                            bb_bcls),
+            ("EMA50 Trend",  f"Rs.{ema50_val:,.1f}", "Above EMA" if ema_bull else "Below EMA",       "badge-green" if ema_bull else "badge-red"),
+            ("EMA Cross",    "50 vs 200",          gx_txt,                                             gx_bcls),
+            ("ATR (14)",     f"Rs.{atr_val:.2f}", "Volatility Measure",                               "badge-blue"),
+        ]
+
+        c1, c2, c3 = st.columns(3)
+        for i, (nm, vl, zn, bc) in enumerate(ind_cards):
+            with [c1, c2, c3][i % 3]:
+                st.markdown(f"""
+                <div class="section-card" style="text-align:center; margin-bottom:12px;">
+                    <div class="m-label" style="font-size:13px;">{nm}</div>
+                    <div style="font-family:Orbitron,monospace; font-size:22px; font-weight:900;
+                                color:#dde6f0; margin:8px 0;">{vl}</div>
+                    <span class="badge {bc}">{zn}</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+    # ==========================================================
+    # TAB 2 - RATING ENGINE
+    # ==========================================================
+    with tabs[2]:
+        st.markdown(f"### {get_text('AI Rating Engine','AI Mathipeettu Iyanthiram')}")
+
+        roe        = (info.get('returnOnEquity') or 0) * 100
+        debt       = info.get('debtToEquity') or 999
+        net_margin = (info.get('profitMargins') or 0) * 100
+        rev_growth = (info.get('revenueGrowth') or 0) * 100
+        eps_growth = (info.get('earningsGrowth') or 0) * 100
+        cur_ratio  = info.get('currentRatio') or 0
+
+        # Fundamental (40 pts)
+        f1 = min(15, max(0, roe / 25 * 15))
+        f2 = 12 if debt < 50 else (8 if debt < 100 else (4 if debt < 200 else 0))
+        f3 = min(8, max(0, net_margin / 20 * 8))
+        f4 = 5 if cur_ratio > 1.5 else (3 if cur_ratio > 1 else 0)
+        fund = f1 + f2 + f3 + f4
+
+        # Technical (40 pts)
+        t1 = 12 if 40 <= rsi_now <= 60 else (8 if 30 <= rsi_now <= 70 else 0)
+        t2 = 14 if macd_bull else 0
+        t3 = 8  if ema_bull  else 0
+        t4 = 6  if golden_x  else 0
+        tech = t1 + t2 + t3 + t4
+
+        # Growth (20 pts)
+        g1 = min(10, max(0, rev_growth / 20 * 10)) if rev_growth > 0 else 0
+        g2 = min(10, max(0, eps_growth / 20 * 10)) if eps_growth > 0 else 0
+        growth = g1 + g2
+
+        total      = fund + tech + growth
+        total_pct  = int(total)
+
+        if total_pct >= 70:
+            clr  = "#39FF14"
+            rec  = get_text("STRONG BUY", "Valuvaga Vaangalam")
+            detail = get_text(
+                "Excellent fundamentals and bullish technicals.",
+                "Sirantha adipppadai & Erppa Pokku."
+            )
+        elif total_pct >= 55:
+            clr  = "#00FFD1"
+            rec  = get_text("BUY", "Vaangalam")
+            detail = get_text(
+                "Good signals. Accumulate gradually.",
+                "Nalla Samignaigal. Padippadadiyaga segarikkalaam."
+            )
+        elif total_pct >= 40:
+            clr  = "#FFD700"
+            rec  = get_text("HOLD", "Vaithirukkalaam")
+            detail = get_text(
+                "Mixed signals. Wait for confirmation.",
+                "Kalappu Samignaigal. Uruthipaduthalukkaaga Kaathtirungal."
+            )
+        else:
+            clr  = "#FF4455"
+            rec  = get_text("AVOID", "Thavirkavum")
+            detail = get_text(
+                "Weak signals. High risk zone.",
+                "Palaveenamana Samignaigal. Athika Aapathu."
+            )
+
+        r1, r2 = st.columns([1, 1.2])
+
+        with r1:
+            fig_g = go.Figure(go.Indicator(
+                mode="gauge+number",
+                value=total_pct,
+                number={
+                    'font': {'size': 52, 'family': 'Orbitron', 'color': clr},
+                    'suffix': ''
+                },
+                gauge={
+                    'axis': {'range': [0, 100], 'tickcolor': '#5a7a9a', 'tickfont': {'size': 12}},
+                    'bar': {'color': clr, 'thickness': 0.25},
+                    'bgcolor': '#080f18',
+                    'bordercolor': '#1a2535',
+                    'steps': [
+                        {'range': [0,  40],  'color': 'rgba(255,68,85,0.15)'},
+                        {'range': [40, 55],  'color': 'rgba(255,215,0,0.1)'},
+                        {'range': [55, 70],  'color': 'rgba(0,255,209,0.1)'},
+                        {'range': [70, 100], 'color': 'rgba(57,255,20,0.15)'},
+                    ],
+                    'threshold': {
+                        'line': {'color': clr, 'width': 4},
+                        'thickness': 0.8,
+                        'value': total_pct
+                    }
+                },
+                title={
+                    'text': f"<b>{rec}</b>",
+                    'font': {'size': 16, 'color': clr, 'family': 'Exo 2'}
+                }
+            ))
+            fig_g.update_layout(
+                paper_bgcolor='#020509', height=300,
+                margin=dict(t=30, b=10, l=20, r=20),
+                font=dict(family="Exo 2")
+            )
+            st.plotly_chart(fig_g, use_container_width=True)
+            st.markdown(
+                f'<div style="text-align:center; color:#5a7a9a; font-size:13px;">{detail}</div>',
+                unsafe_allow_html=True
+            )
+
+        with r2:
+            st.markdown('<div class="section-card">', unsafe_allow_html=True)
+            categories = [
+                ("Fundamental", fund, 40, [
+                    (f"ROE: {roe:.1f}%",          f"+{f1:.0f}"),
+                    (f"Debt/Eq: {debt:.0f}",       f"+{f2:.0f}"),
+                    (f"Net Margin: {net_margin:.1f}%", f"+{f3:.0f}"),
+                    (f"Current Ratio: {cur_ratio:.1f}", f"+{f4:.0f}"),
+                ]),
+                ("Technical", tech, 40, [
+                    (f"RSI: {rsi_now:.1f}",         f"+{t1:.0f}"),
+                    (f"MACD: {'Bull' if macd_bull else 'Bear'}", f"+{t2:.0f}"),
+                    (f"EMA50: {'Above' if ema_bull else 'Below'}", f"+{t3:.0f}"),
+                    (f"Cross: {'Golden' if golden_x else 'Death'}", f"+{t4:.0f}"),
+                ]),
+                ("Growth", growth, 20, [
+                    (f"Rev Growth: {rev_growth:.1f}%", f"+{g1:.0f}"),
+                    (f"EPS Growth: {eps_growth:.1f}%", f"+{g2:.0f}"),
+                ]),
+            ]
+
+            for cat_name, score, mx, factors in categories:
+                pct2 = int(score / mx * 100)
+                bclr = ("#39FF14" if pct2 >= 65
+                        else ("#FFD700" if pct2 >= 40 else "#FF4455"))
+                st.markdown(f"""
+                <div style="margin-bottom:16px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                        <span style="font-weight:800; font-size:14px;">{cat_name}</span>
+                        <span style="font-family:Orbitron,monospace; color:{bclr};
+                                    font-size:14px; font-weight:700;">{int(score)}/{mx}</span>
+                    </div>
+                    <div style="background:#10192a; border-radius:8px; height:10px; margin-bottom:6px;">
+                        <div style="background:{bclr}; width:{pct2}%; height:10px; border-radius:8px;"></div>
+                    </div>
+                    <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                """, unsafe_allow_html=True)
+                for fn, fp in factors:
+                    st.markdown(
+                        f'<span style="background:#10192a; border-radius:6px; padding:2px 8px; '
+                        f'font-size:11px; color:#5a7a9a;">{fn} '
+                        f'<span style="color:{bclr}; font-weight:700;">{fp}</span></span>',
+                        unsafe_allow_html=True
+                    )
+                st.markdown('</div></div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        st.markdown(f"#### {get_text('Target Price Estimate','Ilakku Vilai Mathipeedu')}")
+        tp_c1, tp_c2, tp_c3 = st.columns(3)
+        conservative = ltp * 1.08
+        moderate     = ltp * 1.15
+        aggressive   = ltp * 1.25
+
+        for col, (lbl, tp, clr2) in zip([tp_c1, tp_c2, tp_c3], [
+            (get_text("Conservative", "Echcharikkai"),  conservative, "#FFD700"),
+            (get_text("Moderate",     "Mithamana"),     moderate,     "#00D4FF"),
+            (get_text("Aggressive",   "Theeviramana"),  aggressive,   "#39FF14"),
+        ]):
+            with col:
+                st.markdown(f"""
+                <div class="stat-card" style="border:1px solid {clr2}33;">
+                    <div class="stat-label">{lbl} (1Y)</div>
+                    <div style="font-family:Orbitron,monospace; font-size:20px;
+                                color:{clr2}; font-weight:900;">Rs.{tp:,.2f}</div>
+                    <div style="color:#5a7a9a; font-size:11px;">+{(tp/ltp-1)*100:.1f}% upside</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    # ==========================================================
+    # TAB 3 - FINANCIALS
+    # ==========================================================
+    with tabs[3]:
+        st.markdown(f"### {get_text('Key Financial Metrics','Mukkiya Nithi Vivarangal')}")
+
+        fin_data = {
+            get_text("Income", "Varumaanam"): [
+                ("Revenue (TTM)",    fmt_cr(info.get("totalRevenue"))),
+                ("Net Profit (TTM)", fmt_cr(info.get("netIncomeToCommon"))),
+                ("Gross Profit",     fmt_cr(info.get("grossProfits"))),
+                ("EBITDA",           fmt_cr(info.get("ebitda"))),
+                ("Free Cash Flow",   fmt_cr(info.get("freeCashflow"))),
+                ("Operating CF",     fmt_cr(info.get("operatingCashflow"))),
+            ],
+            get_text("Valuation", "Mathipeedu"): [
+                ("Market Cap",       fmt_cr(info.get("marketCap"))),
+                ("Enterprise Value", fmt_cr(info.get("enterpriseValue"))),
+                ("P/E (TTM)",        safe(info.get("trailingPE"))),
+                ("P/E (Fwd)",        safe(info.get("forwardPE"))),
+                ("P/B Ratio",        safe(info.get("priceToBook"))),
+                ("EV/EBITDA",        safe(info.get("enterpriseToEbitda"))),
+            ],
+            get_text("Health", "Aarokkiyam"): [
+                ("ROE",              fmt_pct(info.get("returnOnEquity"))),
+                ("ROA",              fmt_pct(info.get("returnOnAssets"))),
+                ("Debt/Equity",      safe(info.get("debtToEquity"))),
+                ("Total Debt",       fmt_cr(info.get("totalDebt"))),
+                ("Cash & Equiv.",    fmt_cr(info.get("totalCash"))),
+                ("Current Ratio",    safe(info.get("currentRatio"))),
+            ],
+        }
+
+        fc1, fc2, fc3 = st.columns(3)
+        for col, (section, rows) in zip([fc1, fc2, fc3], fin_data.items()):
+            with col:
+                st.markdown(
+                    f'<div class="section-card">'
+                    f'<p style="font-size:15px;font-weight:800;color:#00D4FF;margin-bottom:8px;">'
+                    f'{section}</p>',
+                    unsafe_allow_html=True
+                )
+                for lbl, val in rows:
+                    st.markdown(
+                        f'<div class="metric-row">'
+                        f'<span class="m-label">{lbl}</span>'
+                        f'<span class="m-value">{val}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True
+                    )
+                st.markdown('</div>', unsafe_allow_html=True)
+
+        st.markdown(f"**{get_text('Per Share & Dividend','Pangu & Eevuthogai')}**")
+        ps1, ps2, ps3, ps4, ps5 = st.columns(5)
+        per_share = [
+            ("EPS (TTM)", f"Rs.{safe(info.get('trailingEps'))}"),
+            ("EPS (Fwd)", f"Rs.{safe(info.get('forwardEps'))}"),
+            ("Book Value",f"Rs.{safe(info.get('bookValue'))}"),
+            ("Div/Share", f"Rs.{safe(info.get('dividendRate'))}"),
+            ("Div Yield",   fmt_pct(info.get("dividendYield"))),
+        ]
+        for col, (lbl, val) in zip([ps1, ps2, ps3, ps4, ps5], per_share):
+            with col:
+                st.markdown(
+                    f'<div class="stat-card">'
+                    f'<div class="stat-label">{lbl}</div>'
+                    f'<div class="stat-value blue">{val}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+    # ==========================================================
+    # TAB 4 - SHAREHOLDING
+    # ==========================================================
+    with tabs[4]:
+        p_pct   = (info.get('heldPercentInsiders') or 0) * 100
+        i_pct   = (info.get('heldPercentInstitutions') or 0) * 100
+        pub_pct = max(0, 100 - p_pct - i_pct)
+
+        fig3 = go.Figure(data=[go.Pie(
+            labels=['Promoters', 'Institutions/FII', 'Public'],
+            values=[p_pct, i_pct, pub_pct],
+            hole=0.65,
+            marker=dict(
+                colors=['#1A73E8', '#00C853', '#FFAB00'],
+                line=dict(color='#020509', width=3)
+            ),
+            textfont=dict(size=13, family="Exo 2"),
+            textinfo='label+percent',
+        )])
+        fig3.add_annotation(
+            text=f"<b>{info.get('longName','')[:10]}</b>",
+            x=0.5, y=0.5,
+            font=dict(size=12, color='#dde6f0'),
+            showarrow=False
+        )
+        fig3.update_layout(
+            template="plotly_dark",
+            paper_bgcolor='#020509', height=400,
+            margin=dict(t=20, b=30),
+            font=dict(family="Exo 2"),
+            legend=dict(orientation="h", y=-0.1, font=dict(size=13))
+        )
+        st.plotly_chart(fig3, use_container_width=True)
+
+        sh1, sh2, sh3 = st.columns(3)
+        for col, (lbl, val, clr2) in zip([sh1, sh2, sh3], [
+            ("Promoters",        f"{p_pct:.2f}%",   "#1A73E8"),
+            ("Institutions/FII", f"{i_pct:.2f}%",   "#00C853"),
+            ("Public",           f"{pub_pct:.2f}%",  "#FFAB00"),
+        ]):
+            with col:
+                st.markdown(
+                    f'<div class="stat-card" style="border:1px solid {clr2}44;">'
+                    f'<div class="stat-label">{lbl}</div>'
+                    f'<div style="font-family:Orbitron,monospace; font-size:26px; '
+                    f'color:{clr2}; font-weight:900;">{val}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+    # ==========================================================
+    # TAB 5 - NEWS
+    # ==========================================================
+    with tabs[5]:
+        st.markdown(
+            f"### {get_text('Latest News','Sameepatthiya Seithigal')} - "
+            f"{info.get('longName','')}"
+        )
+        if news_list:
+            for n in news_list:
+                title     = n.get('title', 'No title')
+                publisher = n.get('publisher', '')
+                link      = n.get('link', '#')
+                pub_time  = n.get('providerPublishTime', 0)
+                try:
+                    time_str = datetime.fromtimestamp(pub_time).strftime(
+                        "%d %b %Y, %I:%M %p"
+                    )
+                except Exception:
+                    time_str = ''
+                st.markdown(f"""
+                <div class="news-card">
+                    <div class="news-title">
+                        <a href="{link}" target="_blank"
+                           style="color:#dde6f0; text-decoration:none;">{title}</a>
+                    </div>
+                    <div class="news-meta">
+                        Publisher: {publisher} | Time: {time_str}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info(get_text(
+                "No news available for this stock.",
+                "Inda Pangirkku Seithigal Kidaikkavillai."
+            ))
+
+    # ==========================================================
+    # TAB 6 - CORPORATE ACTIONS
+    # ==========================================================
+    with tabs[6]:
+        st.markdown(f"### {get_text('Corporate Actions','Niruvaga Nigazhvugal')}")
+        if not actions.empty:
+            disp = actions.sort_index(ascending=False).head(20).copy()
+            disp.index = disp.index.strftime("%d %b %Y")
+            st.dataframe(disp, use_container_width=True)
+
+            if 'Dividends' in actions.columns:
+                div_h = actions[actions['Dividends'] > 0]['Dividends']
+                if not div_h.empty:
+                    st.markdown(f"#### {get_text('Dividend History','Eevuthogai Varalaru')}")
+                    fig4 = go.Figure(go.Bar(
+                        x=div_h.index, y=div_h.values,
+                        marker_color='#FFD700', opacity=0.9
+                    ))
+                    fig4.update_layout(
+                        template="plotly_dark",
+                        paper_bgcolor='#020509', plot_bgcolor='#080f18',
+                        height=280, margin=dict(t=10, b=10),
+                        yaxis_title="Rs./share",
+                        font=dict(family="Exo 2")
+                    )
+                    fig4.update_xaxes(gridcolor='#10192a')
+                    fig4.update_yaxes(gridcolor='#10192a')
+                    st.plotly_chart(fig4, use_container_width=True)
+        else:
+            st.info(get_text(
+                "No corporate actions found.",
+                "Niruvaga Nigazhvugal Kidaikkavillai."
+            ))
+
+    # ==========================================================
+    # TAB 7 - ABOUT
+    # ==========================================================
+    with tabs[7]:
+        st.markdown(f"### {get_text('About Company','Niruvagam Parri')}")
+        about_raw = info.get('longBusinessSummary', 'No description available.')
+
+        # Try translation - if deep_translator not installed, show English
+        try:
+            from deep_translator import GoogleTranslator
+            if st.session_state['language'] == "Tamil":
+                with st.spinner(get_text("Translating...", "Mozhipeyarkkipathu...")):
+                    try:
+                        display_text = GoogleTranslator(
+                            source='auto', target='ta'
+                        ).translate(about_raw)
+                    except Exception:
+                        display_text = about_raw
+            else:
+                display_text = about_raw
+        except ImportError:
+            display_text = about_raw
+
+        st.markdown(
+            f'<div class="section-card" style="font-size:15px; line-height:1.8;">'
+            f'{display_text}</div>',
+            unsafe_allow_html=True
+        )
+
+        st.markdown(f"**{get_text('Company Details','Niruvaga Vivarangal')}**")
+        cd1, cd2 = st.columns(2)
+        left_d = [
+            ("Sector",   info.get("sector",   "N/A")),
+            ("Industry", info.get("industry", "N/A")),
+            ("Country",  info.get("country",  "N/A")),
+            ("Exchange", info.get("exchange", "N/A")),
+        ]
+        right_d = [
+            ("Employees", f"{info.get('fullTimeEmployees', 0):,}"),
+            ("Website",   info.get("website",        "N/A")),
+            ("Currency",  info.get("currency",       "N/A")),
+            ("Fiscal YE", info.get("lastFiscalYearEnd", "N/A")),
+        ]
+        with cd1:
+            for l, v in left_d:
+                st.markdown(
+                    f'<div class="metric-row">'
+                    f'<span class="m-label">{l}</span>'
+                    f'<span class="m-value">{v}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+        with cd2:
+            for l, v in right_d:
+                st.markdown(
+                    f'<div class="metric-row">'
+                    f'<span class="m-label">{l}</span>'
+                    f'<span class="m-value">{v}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True
+                )
+
+except Exception as e:
+    st.error(f"Pizhai (Error): {e}")
+    st.info(
+        "Symbol sariyaga ullidavum. "
+        "Utharanam (Example): SBIN, RELIANCE, TCS, INFY"
+    )
+
+# =============================================================
+# FOOTER
+# =============================================================
+st.markdown("""
+<div style="text-align:center; margin-top:60px; padding:20px 0; border-top:1px solid #1a2535;">
+    <p style="color:#1a2535; font-size:11px; font-family:Orbitron,monospace; letter-spacing:2px;">
+        2026 TAMIL INVEST HUB PRO - CREATED BY SOMASUNDARAM -
+        FOR EDUCATIONAL PURPOSES ONLY - NOT FINANCIAL ADVICE
+    </p>
+</div>
+""", unsafe_allow_html=True)
