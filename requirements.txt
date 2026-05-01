@@ -1,6 +1,1 @@
-streamlit
-yfinance
-pandas
-plotly
-deep-translator
-pandas_ta
+
