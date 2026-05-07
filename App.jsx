@@ -1194,4 +1194,4 @@ const styles = {
     marginTop: 8,
   },
 };
-export default StockApp; // அல்லது உங்கள் function பெயர் எதுவோ அதை இங்கே கொடுக்கவும்.
+export default StockApp; // 
