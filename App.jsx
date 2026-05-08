@@ -9,6 +9,7 @@ const translations = {
     shareholding: "Shareholding",
     corporate: "Corporate Actions",
     rating: "Rating",
+    searchTab: "Search",
     livePrice: "Live Price",
     change: "Change",
     volume: "Volume",
@@ -50,6 +51,9 @@ const translations = {
     dayLow: "Day Low",
     language: "Language",
     scrollingNews: "LIVE MARKET",
+    searchPlaceholder: "Search by name or ticker...",
+    noResults: "No stocks found",
+    selectStock: "Select a stock to view details",
   },
   ta: {
     title: "ஸ்டாக்பல்ஸ் ப்ரோ",
@@ -59,6 +63,7 @@ const translations = {
     shareholding: "பங்குடைமை",
     corporate: "நிறுவன செயல்கள்",
     rating: "மதிப்பீடு",
+    searchTab: "தேடல்",
     livePrice: "நேரடி விலை",
     change: "மாற்றம்",
     volume: "அளவு",
@@ -100,6 +105,9 @@ const translations = {
     dayLow: "நாள் தாழ்வு",
     language: "மொழி",
     scrollingNews: "நேரடி சந்தை",
+    searchPlaceholder: "பெயர் அல்லது டிக்கர் மூலம் தேடுங்கள்...",
+    noResults: "பங்குகள் எதுவும் இல்லை",
+    selectStock: "விவரங்களை காண ஒரு பங்கை தேர்ந்தெடுக்கவும்",
   },
 };
 
@@ -131,13 +139,13 @@ const stocks = [
     corporate: [
       { type: "dividend", date: "2024-08-12", details: "₹9.5 per share" },
       { type: "bonus", date: "2017-09-20", details: "1:1 Bonus" },
+      { type: "split", date: "2017-07-18", details: "1:2 Split" },
     ],
     rating: { strongBuy: 18, buy: 12, hold: 5, sell: 2, strongSell: 0 },
     targetPrice: 3150,
     technicalScore: 72,
     fundamentalScore: 85,
   },
-
   {
     name: "Infosys Ltd",
     ticker: "INFY",
@@ -165,13 +173,13 @@ const stocks = [
     corporate: [
       { type: "dividend", date: "2025-01-15", details: "₹21 per share" },
       { type: "buyback", date: "2023-06-25", details: "₹1,500 Cr buyback" },
+      { type: "split", date: "2018-06-01", details: "1:2 Split" },
     ],
     rating: { strongBuy: 10, buy: 15, hold: 8, sell: 3, strongSell: 1 },
     targetPrice: 2100,
     technicalScore: 60,
     fundamentalScore: 78,
   },
-
   {
     name: "HDFC Bank",
     ticker: "HDFCBANK",
@@ -198,6 +206,7 @@ const stocks = [
     },
     corporate: [
       { type: "dividend", date: "2025-04-20", details: "₹19.5 per share" },
+      { type: "rights", date: "2023-03-10", details: "1:4 Rights @ ₹1400" },
     ],
     rating: { strongBuy: 22, buy: 10, hold: 4, sell: 1, strongSell: 0 },
     targetPrice: 1950,
@@ -210,161 +219,212 @@ const tickerItems = [
   "RELIANCE ▲ 2847.35 (+1.24%)",
   "INFY ▼ 1892.60 (-0.87%)",
   "HDFCBANK ▲ 1654.90 (+0.45%)",
-  "NIFTY ▲ 22,643 (+0.48%)",
+  "TCS ▲ 3512.45 (+0.92%)",
+  "WIPRO ▼ 478.20 (-0.34%)",
+  "BAJFINANCE ▲ 7234.10 (+1.87%)",
+  "ICICIBANK ▲ 1102.35 (+0.63%)",
+  "TATAMOTORS ▼ 812.50 (-1.12%)",
+  "AXISBANK ▲ 1087.75 (+0.78%)",
+  "SBIN ▼ 764.30 (-0.21%)",
   "SENSEX ▲ 74,892 (+0.56%)",
+  "NIFTY ▲ 22,643 (+0.48%)",
+  "GOLD ▲ ₹71,245 (+0.31%)",
+  "USD/INR ▼ 83.42 (-0.08%)",
 ];
 
-export default function StockApp() {
+const quarters = ["Q1 FY24", "Q2 FY24", "Q3 FY24", "Q4 FY24"];
+const corporateTypeColors = {
+  dividend: "#10b981",
+  bonus: "#f59e0b",
+  split: "#6366f1",
+  rights: "#3b82f6",
+  buyback: "#ec4899",
+};
+const corporateIcons = {
+  dividend: "💰",
+  bonus: "🎁",
+  split: "✂️",
+  rights: "📜",
+  buyback: "🔄",
+};
 
+export default function StockApp() {
   const [lang, setLang] = useState("en");
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedStock, setSelectedStock] = useState(stocks[0]);
-  const [search, setSearch] = useState("");
-
   const [prices, setPrices] = useState(() =>
     stocks.reduce((acc, s) => ({ ...acc, [s.ticker]: s.price }), {})
   );
+  const [flashTicker, setFlashTicker] = useState({});
+
+  // Search tab state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchSelected, setSearchSelected] = useState(null);
+  const searchInputRef = useRef(null);
 
   const t = translations[lang];
+  const tickerRef = useRef(null);
 
   useEffect(() => {
     const interval = setInterval(() => {
       setPrices((prev) => {
         const next = { ...prev };
-
+        const flashes = {};
         stocks.forEach((s) => {
-          const delta = (Math.random() - 0.5) * 4;
+          const delta = (Math.random() - 0.49) * 3;
           next[s.ticker] = Math.max(1, prev[s.ticker] + delta);
+          flashes[s.ticker] = delta >= 0 ? "up" : "down";
         });
-
+        setFlashTicker(flashes);
+        setTimeout(() => setFlashTicker({}), 400);
         return next;
       });
     }, 1800);
-
     return () => clearInterval(interval);
   }, []);
 
-  const filteredStocks = stocks.filter(
-    (s) =>
-      s.name.toLowerCase().includes(search.toLowerCase()) ||
-      s.ticker.toLowerCase().includes(search.toLowerCase())
-  );
+  // Search logic — computed directly, no useEffect needed
+  const searchResults = searchQuery.trim() === ""
+    ? []
+    : stocks.filter((s) => {
+        const q = searchQuery.toLowerCase();
+        return (
+          s.name.toLowerCase().includes(q) ||
+          s.ticker.toLowerCase().includes(q) ||
+          s.sector.toLowerCase().includes(q) ||
+          s.industry.toLowerCase().includes(q)
+        );
+      });
+
+  // Focus search input when tab opens
+  useEffect(() => {
+    if (activeTab === "search" && searchInputRef.current) {
+      setTimeout(() => searchInputRef.current && searchInputRef.current.focus(), 100);
+    }
+  }, [activeTab]);
 
   const livePrice = prices[selectedStock.ticker];
-
   const liveChange = (
-    ((livePrice - selectedStock.prevClose) /
-      selectedStock.prevClose) *
+    ((livePrice - selectedStock.prevClose) / selectedStock.prevClose) *
     100
   ).toFixed(2);
-
   const isPositive = parseFloat(liveChange) >= 0;
+
+  const ratingData = selectedStock.rating;
+  const totalRatings = Object.values(ratingData).reduce((a, b) => a + b, 0);
+  const ratingColors = {
+    strongBuy: "#10b981",
+    buy: "#34d399",
+    hold: "#f59e0b",
+    sell: "#f87171",
+    strongSell: "#ef4444",
+  };
+
+  const latestShareholding = {
+    promoter: selectedStock.shareholding.promoter[3],
+    fii: selectedStock.shareholding.fii[3],
+    dii: selectedStock.shareholding.dii[3],
+    public: selectedStock.shareholding.public[3],
+    others: selectedStock.shareholding.others[3],
+  };
+
+  const donutSegments = (() => {
+    const items = [
+      { key: "promoter", color: "#6366f1" },
+      { key: "fii", color: "#f59e0b" },
+      { key: "dii", color: "#10b981" },
+      { key: "public", color: "#3b82f6" },
+      { key: "others", color: "#ec4899" },
+    ];
+    let cumulative = 0;
+    return items.map((item) => {
+      const pct = latestShareholding[item.key];
+      const start = cumulative;
+      cumulative += pct;
+      return { ...item, pct, start };
+    });
+  })();
+
+  function polarToCartesian(cx, cy, r, angleDeg) {
+    const rad = ((angleDeg - 90) * Math.PI) / 180;
+    return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+  }
+
+  function arcPath(cx, cy, r, startAngle, endAngle) {
+    const s = polarToCartesian(cx, cy, r, startAngle);
+    const e = polarToCartesian(cx, cy, r, endAngle);
+    const large = endAngle - startAngle > 180 ? 1 : 0;
+    return `M ${s.x} ${s.y} A ${r} ${r} 0 ${large} 1 ${e.x} ${e.y}`;
+  }
+
+  const tabs = ["overview", "shareholding", "corporate", "rating", "search"];
+
+  const handleSearchSelect = (stock) => {
+    setSearchSelected(stock);
+    setSelectedStock(stock);
+  };
+
+  const searchLivePrice = searchSelected ? prices[searchSelected.ticker] : null;
+  const searchLiveChange = searchSelected
+    ? (((searchLivePrice - searchSelected.prevClose) / searchSelected.prevClose) * 100).toFixed(2)
+    : null;
+  const searchIsPositive = searchSelected ? parseFloat(searchLiveChange) >= 0 : false;
 
   return (
     <div style={styles.app}>
-
-      {/* TOP TICKER */}
-
+      {/* Ticker Tape */}
       <div style={styles.tickerWrap}>
-
-        <div style={styles.tickerLabel}>
-          {t.scrollingNews}
-        </div>
-
+        <span style={styles.tickerLabel}>{t.scrollingNews}</span>
         <div style={styles.tickerInner}>
-          <div style={styles.tickerTrack}>
-            {[...tickerItems, ...tickerItems].map((item, i) => (
-              <span
-                key={i}
-                style={{
-                  ...styles.tickerItem,
-                  color: item.includes("▲")
-                    ? "#34d399"
-                    : "#f87171",
-                }}
-              >
-                {item}
-                &nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;
-              </span>
-            ))}
+          <div ref={tickerRef} style={styles.tickerTrack}>
+            {[...tickerItems, ...tickerItems].map((item, i) => {
+              const isUp = item.includes("▲");
+              return (
+                <span
+                  key={i}
+                  style={{
+                    ...styles.tickerItem,
+                    color: isUp ? "#34d399" : "#f87171",
+                  }}
+                >
+                  {item}&nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;
+                </span>
+              );
+            })}
           </div>
         </div>
-
       </div>
 
-      {/* HEADER */}
-
+      {/* Header */}
       <div style={styles.header}>
-
         <div>
-          <div style={styles.logo}>
-            {t.title}
-          </div>
-
-          <div style={styles.logoSub}>
-            {t.subtitle}
-          </div>
+          <div style={styles.logo}>{t.title}</div>
+          <div style={styles.logoSub}>{t.subtitle}</div>
         </div>
-
         <div style={styles.langSwitch}>
-
-          <button
-            onClick={() => setLang("en")}
-            style={{
-              ...styles.langBtn,
-              ...(lang === "en"
-                ? styles.langBtnActive
-                : {}),
-            }}
-          >
-            English
-          </button>
-
-          <button
-            onClick={() => setLang("ta")}
-            style={{
-              ...styles.langBtn,
-              ...(lang === "ta"
-                ? styles.langBtnActive
-                : {}),
-            }}
-          >
-            தமிழ்
-          </button>
-
+          <span style={styles.langLabel}>{t.language}:</span>
+          {["en", "ta"].map((l) => (
+            <button
+              key={l}
+              onClick={() => setLang(l)}
+              style={{
+                ...styles.langBtn,
+                ...(lang === l ? styles.langBtnActive : {}),
+              }}
+            >
+              {l === "en" ? "English" : "தமிழ்"}
+            </button>
+          ))}
         </div>
-
       </div>
 
-      {/* SEARCH */}
-
-      <div style={styles.searchWrap}>
-
-        <input
-          type="text"
-          placeholder={t.search}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={styles.searchInput}
-        />
-
-      </div>
-
-      {/* STOCK LIST */}
-
+      {/* Stock Selector */}
       <div style={styles.stockSelector}>
-
-        {filteredStocks.map((s) => {
-
+        {stocks.map((s) => {
           const lp = prices[s.ticker];
-
-          const chg = (
-            ((lp - s.prevClose) / s.prevClose) *
-            100
-          ).toFixed(2);
-
+          const chg = (((lp - s.prevClose) / s.prevClose) * 100).toFixed(2);
           const pos = parseFloat(chg) >= 0;
-
+          const flash = flashTicker[s.ticker];
           return (
             <button
               key={s.ticker}
@@ -374,97 +434,65 @@ export default function StockApp() {
                 ...(selectedStock.ticker === s.ticker
                   ? styles.stockCardActive
                   : {}),
+                ...(flash === "up"
+                  ? styles.flashUp
+                  : flash === "down"
+                  ? styles.flashDown
+                  : {}),
               }}
             >
-
-              <div style={styles.stockCardTicker}>
-                {s.ticker}
-              </div>
-
-              <div style={styles.stockCardName}>
-                {s.name}
-              </div>
-
-              <div style={styles.stockCardPrice}>
-                ₹{lp.toFixed(2)}
-              </div>
-
+              <div style={styles.stockCardTicker}>{s.ticker}</div>
+              <div style={styles.stockCardName}>{s.name}</div>
+              <div style={styles.stockCardPrice}>₹{lp.toFixed(2)}</div>
               <div
                 style={{
                   ...styles.stockCardChange,
-                  color: pos
-                    ? "#34d399"
-                    : "#f87171",
+                  color: pos ? "#34d399" : "#f87171",
                 }}
               >
                 {pos ? "▲" : "▼"} {Math.abs(chg)}%
               </div>
-
             </button>
           );
         })}
-
       </div>
 
-      {/* MAIN CARD */}
-
+      {/* Main Card */}
       <div style={styles.mainCard}>
-
-        {/* HERO */}
-
+        {/* Price Hero */}
         <div style={styles.priceHero}>
-
           <div>
-
-            <div style={styles.heroName}>
-              {selectedStock.name}
-            </div>
-
+            <div style={styles.heroName}>{selectedStock.name}</div>
             <div style={styles.heroMeta}>
-              {selectedStock.ticker}
-              &nbsp;•&nbsp;
-              {selectedStock.sector}
+              {selectedStock.ticker} &nbsp;•&nbsp; {selectedStock.sector}{" "}
+              &nbsp;•&nbsp; {selectedStock.industry}
             </div>
-
           </div>
-
           <div style={{ textAlign: "right" }}>
-
             <div
               style={{
                 ...styles.heroPrice,
-                color: isPositive
-                  ? "#34d399"
-                  : "#f87171",
+                color: isPositive ? "#34d399" : "#f87171",
               }}
             >
               ₹{livePrice.toFixed(2)}
             </div>
-
             <div
               style={{
                 ...styles.heroChange,
                 background: isPositive
                   ? "rgba(52,211,153,0.15)"
                   : "rgba(248,113,113,0.15)",
-                color: isPositive
-                  ? "#34d399"
-                  : "#f87171",
+                color: isPositive ? "#34d399" : "#f87171",
               }}
             >
-              {isPositive ? "▲" : "▼"}
-              {" "}
-              {Math.abs(liveChange)}%
+              {isPositive ? "▲" : "▼"} {Math.abs(liveChange)}%
             </div>
-
           </div>
-
         </div>
 
-        {/* METRICS */}
-
+        {/* Metric Row */}
         <div style={styles.metricRow}>
-
           {[
             { label: t.prevClose, value: `₹${selectedStock.prevClose}` },
             { label: t.open, value: `₹${selectedStock.open}` },
@@ -477,85 +505,455 @@ export default function StockApp() {
             { label: t.volume, value: selectedStock.volume },
             { label: t.marketCap, value: selectedStock.marketCap },
           ].map((m, i) => (
-
             <div key={i} style={styles.metricBox}>
-
-              <div style={styles.metricLabel}>
-                {m.label}
-              </div>
-
-              <div style={styles.metricValue}>
-                {m.value}
-              </div>
-
+              <div style={styles.metricLabel}>{m.label}</div>
+              <div style={styles.metricValue}>{m.value}</div>
             </div>
-
           ))}
-
         </div>
 
+        {/* Tabs */}
+        <div style={styles.tabBar}>
+          {tabs.map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              style={{
+                ...styles.tabBtn,
+                ...(activeTab === tab ? styles.tabBtnActive : {}),
+              }}
+            >
+              {tab === "search" ? t.searchTab : t[tab]}
+            </button>
+          ))}
+        </div>
+
+        {/* TAB: Overview */}
+        {activeTab === "overview" && (
+          <div style={styles.section}>
+            <div style={styles.grid2}>
+              <div style={styles.infoCard}>
+                <div style={styles.infoCardTitle}>{t.ticker}</div>
+                <div style={styles.infoCardValue}>{selectedStock.ticker}</div>
+              </div>
+              <div style={styles.infoCard}>
+                <div style={styles.infoCardTitle}>{t.sector}</div>
+                <div style={styles.infoCardValue}>{selectedStock.sector}</div>
+              </div>
+              <div style={styles.infoCard}>
+                <div style={styles.infoCardTitle}>{t.industry}</div>
+                <div style={styles.infoCardValue}>{selectedStock.industry}</div>
+              </div>
+              <div style={styles.infoCard}>
+                <div style={styles.infoCardTitle}>{t.marketCap}</div>
+                <div style={styles.infoCardValue}>{selectedStock.marketCap}</div>
+              </div>
+            </div>
+
+            {/* 52 Week Range Bar */}
+            <div style={styles.rangeBox}>
+              <div style={styles.rangeLabel}>
+                <span style={{ color: "#94a3b8" }}>{t.low52}: ₹{selectedStock.low52}</span>
+                <span style={{ color: "#f8fafc", fontWeight: 600 }}>52W Range</span>
+                <span style={{ color: "#94a3b8" }}>{t.high52}: ₹{selectedStock.high52}</span>
+              </div>
+              <div style={styles.rangeTrack}>
+                <div
+                  style={{
+                    ...styles.rangeFill,
+                    width: `${Math.min(
+                      100,
+                      ((livePrice - selectedStock.low52) /
+                        (selectedStock.high52 - selectedStock.low52)) *
+                        100
+                    ).toFixed(1)}%`,
+                  }}
+                />
+                <div
+                  style={{
+                    ...styles.rangeDot,
+                    left: `${Math.min(
+                      100,
+                      ((livePrice - selectedStock.low52) /
+                        (selectedStock.high52 - selectedStock.low52)) *
+                        100
+                    ).toFixed(1)}%`,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: Shareholding */}
+        {activeTab === "shareholding" && (
+          <div style={styles.section}>
+            <div style={styles.sectionTitle}>{t.shareholdingPattern}</div>
+
+            {/* Donut + Legend */}
+            <div style={styles.donutRow}>
+              <svg width="180" height="180" viewBox="0 0 180 180">
+                <circle cx="90" cy="90" r="70" fill="none" stroke="#1e293b" strokeWidth="2" />
+                {donutSegments.map((seg, i) => {
+                  const startAngle = (seg.start / 100) * 360;
+                  const endAngle = ((seg.start + seg.pct) / 100) * 360;
+                  if (seg.pct === 0) return null;
+                  return (
+                    <path
+                      key={i}
+                      d={arcPath(90, 90, 65, startAngle, endAngle)}
+                      fill="none"
+                      stroke={seg.color}
+                      strokeWidth="22"
+                      strokeLinecap="butt"
+                    />
+                  );
+                })}
+                <circle cx="90" cy="90" r="42" fill="#0f172a" />
+                <text x="90" y="86" textAnchor="middle" fill="#f8fafc" fontSize="11" fontWeight="700">
+                  {latestShareholding.promoter}%
+                </text>
+                <text x="90" y="101" textAnchor="middle" fill="#64748b" fontSize="9">
+                  Promoter
+                </text>
+              </svg>
+
+              <div style={styles.legend}>
+                {donutSegments.map((seg) => (
+                  <div key={seg.key} style={styles.legendItem}>
+                    <div style={{ ...styles.legendDot, background: seg.color }} />
+                    <span style={styles.legendKey}>{t[seg.key]}</span>
+                    <span style={styles.legendVal}>{seg.pct}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Quarterly Trend */}
+            <div style={styles.sectionTitle}>{t.quarterlyTrend}</div>
+            <div style={styles.trendTable}>
+              <div style={styles.trendHeader}>
+                <div style={styles.trendCell}></div>
+                {quarters.map((q) => (
+                  <div key={q} style={{ ...styles.trendCell, color: "#94a3b8" }}>{q}</div>
+                ))}
+              </div>
+              {[
+                { key: "promoter", color: "#6366f1" },
+                { key: "fii", color: "#f59e0b" },
+                { key: "dii", color: "#10b981" },
+                { key: "public", color: "#3b82f6" },
+                { key: "others", color: "#ec4899" },
+              ].map((row) => (
+                <div key={row.key} style={styles.trendRow}>
+                  <div style={{ ...styles.trendCell, display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: row.color }} />
+                    <span style={{ color: "#e2e8f0", fontSize: 12 }}>{t[row.key]}</span>
+                  </div>
+                  {selectedStock.shareholding[row.key].map((v, i) => {
+                    const prev = i > 0 ? selectedStock.shareholding[row.key][i - 1] : v;
+                    const delta = v - prev;
+                    return (
+                      <div key={i} style={styles.trendCell}>
+                        <span style={{ color: "#f8fafc", fontWeight: 600 }}>{v}%</span>
+                        {i > 0 && (
+                          <span style={{ fontSize: 9, color: delta > 0 ? "#34d399" : delta < 0 ? "#f87171" : "#64748b", marginLeft: 3 }}>
+                            {delta > 0 ? "▲" : delta < 0 ? "▼" : "–"}
+                            {Math.abs(delta).toFixed(1)}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TAB: Corporate Actions */}
+        {activeTab === "corporate" && (
+          <div style={styles.section}>
+            <div style={styles.sectionTitle}>{t.corporate}</div>
+            <div style={styles.corpList}>
+              {selectedStock.corporate.map((action, i) => (
+                <div key={i} style={styles.corpCard}>
+                  <div style={{ ...styles.corpBadge, background: corporateTypeColors[action.type] + "22", border: `1px solid ${corporateTypeColors[action.type]}44` }}>
+                    <span style={{ fontSize: 20 }}>{corporateIcons[action.type]}</span>
+                    <span style={{ color: corporateTypeColors[action.type], fontWeight: 700, fontSize: 12 }}>
+                      {t[action.type] || action.type}
+                    </span>
+                  </div>
+                  <div style={styles.corpDetails}>
+                    <div style={{ color: "#f8fafc", fontWeight: 600, fontSize: 14 }}>{action.details}</div>
+                    <div style={{ color: "#64748b", fontSize: 12, marginTop: 2 }}>
+                      {t.date}: {action.date}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TAB: Rating */}
+        {activeTab === "rating" && (
+          <div style={styles.section}>
+            <div style={styles.sectionTitle}>{t.analystRating}</div>
+
+            {/* Rating Bars */}
+            {Object.entries(ratingData).map(([key, count]) => {
+              const pct = ((count / totalRatings) * 100).toFixed(0);
+              return (
+                <div key={key} style={styles.ratingRow}>
+                  <div style={{ ...styles.ratingLabel, color: ratingColors[key] }}>{t[key]}</div>
+                  <div style={styles.ratingTrack}>
+                    <div
+                      style={{
+                        ...styles.ratingFill,
+                        width: `${pct}%`,
+                        background: ratingColors[key],
+                      }}
+                    />
+                  </div>
+                  <div style={styles.ratingCount}>{count}</div>
+                </div>
+              );
+            })}
+
+            {/* Scores */}
+            <div style={styles.scoreGrid}>
+              <div style={styles.scoreBox}>
+                <div style={styles.scoreLabel}>{t.technicalScore}</div>
+                <div style={styles.scorePie}>
+                  <svg width="80" height="80">
+                    <circle cx="40" cy="40" r="32" fill="none" stroke="#1e293b" strokeWidth="8" />
+                    <circle
+                      cx="40" cy="40" r="32" fill="none"
+                      stroke="#6366f1" strokeWidth="8"
+                      strokeDasharray={`${(selectedStock.technicalScore / 100) * 201} 201`}
+                      strokeDashoffset="50"
+                      strokeLinecap="round"
+                    />
+                    <text x="40" y="45" textAnchor="middle" fill="#f8fafc" fontSize="14" fontWeight="700">
+                      {selectedStock.technicalScore}
+                    </text>
+                  </svg>
+                </div>
+              </div>
+              <div style={styles.scoreBox}>
+                <div style={styles.scoreLabel}>{t.fundamentalScore}</div>
+                <div style={styles.scorePie}>
+                  <svg width="80" height="80">
+                    <circle cx="40" cy="40" r="32" fill="none" stroke="#1e293b" strokeWidth="8" />
+                    <circle
+                      cx="40" cy="40" r="32" fill="none"
+                      stroke="#10b981" strokeWidth="8"
+                      strokeDasharray={`${(selectedStock.fundamentalScore / 100) * 201} 201`}
+                      strokeDashoffset="50"
+                      strokeLinecap="round"
+                    />
+                    <text x="40" y="45" textAnchor="middle" fill="#f8fafc" fontSize="14" fontWeight="700">
+                      {selectedStock.fundamentalScore}
+                    </text>
+                  </svg>
+                </div>
+              </div>
+              <div style={styles.scoreBox}>
+                <div style={styles.scoreLabel}>{t.targetPrice}</div>
+                <div style={styles.targetPrice}>₹{selectedStock.targetPrice}</div>
+                <div style={{ color: "#34d399", fontSize: 12, marginTop: 4 }}>
+                  {t.upside}: +{(((selectedStock.targetPrice - livePrice) / livePrice) * 100).toFixed(1)}%
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: Search */}
+        {activeTab === "search" && (
+          <div style={styles.section}>
+            {/* Search Input */}
+            <div style={styles.searchBox}>
+              <span style={styles.searchIcon}>🔍</span>
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setSearchSelected(null);
+                }}
+                placeholder={t.searchPlaceholder}
+                style={styles.searchInput}
+              />
+              {searchQuery.length > 0 && (
+                <button
+                  onClick={() => { setSearchQuery(""); setSearchSelected(null); }}
+                  style={styles.searchClear}
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* Results List */}
+            {searchQuery.trim() !== "" && (
+              <div style={styles.searchResultsList}>
+                {searchResults.length === 0 ? (
+                  <div style={styles.noResults}>
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>🔎</div>
+                    <div style={{ color: "#64748b", fontSize: 14 }}>{t.noResults}</div>
+                  </div>
+                ) : (
+                  searchResults.map((stock) => {
+                    const lp = prices[stock.ticker];
+                    const chg = (((lp - stock.prevClose) / stock.prevClose) * 100).toFixed(2);
+                    const pos = parseFloat(chg) >= 0;
+                    const isActive = searchSelected && searchSelected.ticker === stock.ticker;
+                    return (
+                      <button
+                        key={stock.ticker}
+                        onClick={() => handleSearchSelect(stock)}
+                        style={{
+                          ...styles.searchResultItem,
+                          ...(isActive ? styles.searchResultItemActive : {}),
+                        }}
+                      >
+                        <div style={styles.searchResultLeft}>
+                          <div style={styles.searchResultTicker}>{stock.ticker}</div>
+                          <div style={styles.searchResultName}>{stock.name}</div>
+                          <div style={styles.searchResultMeta}>{stock.sector} • {stock.industry}</div>
+                        </div>
+                        <div style={styles.searchResultRight}>
+                          <div style={styles.searchResultPrice}>₹{lp.toFixed(2)}</div>
+                          <div style={{ ...styles.searchResultChg, color: pos ? "#34d399" : "#f87171" }}>
+                            {pos ? "▲" : "▼"} {Math.abs(chg)}%
+                          </div>
+                          <div style={styles.searchResultCap}>{stock.marketCap}</div>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            )}
+
+            {/* Selected Stock Detail Card */}
+            {searchSelected && (
+              <div style={styles.searchDetailCard}>
+                <div style={styles.searchDetailHeader}>
+                  <div>
+                    <div style={styles.searchDetailName}>{searchSelected.name}</div>
+                    <div style={styles.searchDetailMeta}>{searchSelected.ticker} • {searchSelected.sector} • {searchSelected.industry}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ ...styles.searchDetailPrice, color: searchIsPositive ? "#34d399" : "#f87171" }}>
+                      ₹{searchLivePrice.toFixed(2)}
+                    </div>
+                    <div style={{
+                      ...styles.searchDetailChgBadge,
+                      background: searchIsPositive ? "rgba(52,211,153,0.15)" : "rgba(248,113,113,0.15)",
+                      color: searchIsPositive ? "#34d399" : "#f87171",
+                    }}>
+                      {searchIsPositive ? "▲" : "▼"} {Math.abs(searchLiveChange)}%
+                    </div>
+                  </div>
+                </div>
+
+                <div style={styles.searchDetailGrid}>
+                  {[
+                    { label: t.prevClose, value: `₹${searchSelected.prevClose}` },
+                    { label: t.open, value: `₹${searchSelected.open}` },
+                    { label: t.dayHigh, value: `₹${searchSelected.dayHigh}` },
+                    { label: t.dayLow, value: `₹${searchSelected.dayLow}` },
+                    { label: t.high52, value: `₹${searchSelected.high52}` },
+                    { label: t.low52, value: `₹${searchSelected.low52}` },
+                    { label: t.pe, value: searchSelected.pe },
+                    { label: t.eps, value: `₹${searchSelected.eps}` },
+                    { label: t.volume, value: searchSelected.volume },
+                    { label: t.marketCap, value: searchSelected.marketCap },
+                  ].map((m, i) => (
+                    <div key={i} style={styles.searchDetailMetric}>
+                      <div style={styles.searchDetailMetricLabel}>{m.label}</div>
+                      <div style={styles.searchDetailMetricValue}>{m.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Scores row */}
+                <div style={styles.searchScoreRow}>
+                  <div style={styles.searchScoreItem}>
+                    <div style={styles.searchScoreLabel}>{t.technicalScore}</div>
+                    <div style={styles.searchScoreBar}>
+                      <div style={{ ...styles.searchScoreFill, width: `${searchSelected.technicalScore}%`, background: "#6366f1" }} />
+                    </div>
+                    <div style={styles.searchScoreVal}>{searchSelected.technicalScore}</div>
+                  </div>
+                  <div style={styles.searchScoreItem}>
+                    <div style={styles.searchScoreLabel}>{t.fundamentalScore}</div>
+                    <div style={styles.searchScoreBar}>
+                      <div style={{ ...styles.searchScoreFill, width: `${searchSelected.fundamentalScore}%`, background: "#10b981" }} />
+                    </div>
+                    <div style={styles.searchScoreVal}>{searchSelected.fundamentalScore}</div>
+                  </div>
+                  <div style={styles.searchScoreItem}>
+                    <div style={styles.searchScoreLabel}>{t.targetPrice}</div>
+                    <div style={{ color: "#f8fafc", fontWeight: 700, fontSize: 15, marginTop: 4 }}>₹{searchSelected.targetPrice}</div>
+                    <div style={{ color: "#34d399", fontSize: 11 }}>
+                      {t.upside}: +{(((searchSelected.targetPrice - searchLivePrice) / searchLivePrice) * 100).toFixed(1)}%
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Empty state when no query */}
+            {searchQuery.trim() === "" && !searchSelected && (
+              <div style={styles.searchEmpty}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>📈</div>
+                <div style={{ color: "#64748b", fontSize: 14 }}>{t.selectStock}</div>
+                <div style={{ color: "#334155", fontSize: 12, marginTop: 6 }}>
+                  {stocks.map(s => s.ticker).join(" • ")}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <style>{`
-
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Noto+Sans+Tamil:wght@400;600;700&display=swap');
-
         @keyframes ticker {
-          0% {
-            transform: translateX(0);
-          }
-
-          100% {
-            transform: translateX(-50%);
-          }
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
         }
-
-        *{
-          box-sizing:border-box;
-          margin:0;
-          padding:0;
+        @keyframes flashUp {
+          0%,100% { background: transparent; }
+          50% { background: rgba(52,211,153,0.2); }
         }
-
-        body{
-          background:#0a0f1e;
+        @keyframes flashDown {
+          0%,100% { background: transparent; }
+          50% { background: rgba(248,113,113,0.2); }
         }
-
-        ::-webkit-scrollbar{
-          width:4px;
-          height:4px;
-        }
-
-        ::-webkit-scrollbar-thumb{
-          background:#334155;
-          border-radius:4px;
-        }
-
-        @media(max-width:768px){
-
-          .mobile-grid{
-            grid-template-columns:1fr !important;
-          }
-
-        }
-
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #0a0f1e; }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
       `}</style>
-
     </div>
   );
 }
 
 const styles = {
-
   app: {
-    background:
-      "linear-gradient(135deg,#0a0f1e 0%,#0d1829 50%,#0a0f1e 100%)",
+    background: "linear-gradient(135deg, #0a0f1e 0%, #0d1829 50%, #0a0f1e 100%)",
     minHeight: "100vh",
-    fontFamily:
-      "'Space Grotesk','Noto Sans Tamil',sans-serif",
+    fontFamily: "'Space Grotesk', 'Noto Sans Tamil', sans-serif",
     color: "#f8fafc",
     paddingBottom: 40,
   },
-
   tickerWrap: {
     background: "#050a14",
     borderBottom: "1px solid #1e293b",
@@ -564,7 +962,6 @@ const styles = {
     overflow: "hidden",
     height: 36,
   },
-
   tickerLabel: {
     background: "#6366f1",
     color: "#fff",
@@ -577,136 +974,118 @@ const styles = {
     letterSpacing: 1.5,
     flexShrink: 0,
   },
-
   tickerInner: {
     flex: 1,
     overflow: "hidden",
+    position: "relative",
   },
-
   tickerTrack: {
     display: "inline-flex",
     whiteSpace: "nowrap",
-    animation: "ticker 30s linear infinite",
+    animation: "ticker 35s linear infinite",
     paddingLeft: 16,
   },
-
   tickerItem: {
     fontSize: 12,
     fontWeight: 600,
+    letterSpacing: 0.5,
   },
-
   header: {
     display: "flex",
-    justifyContent: "space-between",
     alignItems: "center",
-    padding: "20px 24px",
+    justifyContent: "space-between",
+    padding: "20px 24px 16px",
     borderBottom: "1px solid #1e293b",
   },
-
   logo: {
     fontSize: 24,
     fontWeight: 700,
-    background:
-      "linear-gradient(90deg,#6366f1,#a78bfa)",
+    background: "linear-gradient(90deg, #6366f1, #a78bfa)",
     WebkitBackgroundClip: "text",
     WebkitTextFillColor: "transparent",
+    letterSpacing: -0.5,
   },
-
   logoSub: {
     fontSize: 11,
     color: "#64748b",
     marginTop: 2,
     letterSpacing: 1,
+    textTransform: "uppercase",
   },
-
   langSwitch: {
     display: "flex",
+    alignItems: "center",
     gap: 8,
   },
-
+  langLabel: {
+    fontSize: 12,
+    color: "#64748b",
+  },
   langBtn: {
     background: "#1e293b",
     border: "1px solid #334155",
     color: "#94a3b8",
-    padding: "6px 12px",
+    padding: "5px 14px",
     borderRadius: 20,
     cursor: "pointer",
     fontSize: 12,
     fontWeight: 600,
+    transition: "all 0.2s",
   },
-
   langBtnActive: {
     background: "#6366f1",
-    color: "#fff",
     border: "1px solid #6366f1",
+    color: "#fff",
   },
-
-  searchWrap: {
-    padding: "16px 24px 0",
-  },
-
-  searchInput: {
-    width: "100%",
-    background: "#0f172a",
-    border: "1px solid #1e293b",
-    color: "#f8fafc",
-    padding: "14px 16px",
-    borderRadius: 12,
-    fontSize: 14,
-    outline: "none",
-  },
-
   stockSelector: {
     display: "flex",
     gap: 12,
     padding: "16px 24px",
     overflowX: "auto",
   },
-
   stockCard: {
     background: "#0f172a",
     border: "1px solid #1e293b",
     borderRadius: 12,
     padding: "12px 16px",
     cursor: "pointer",
-    minWidth: 150,
+    minWidth: 140,
     textAlign: "left",
-    transition: "all .3s",
+    transition: "all 0.3s",
   },
-
   stockCardActive: {
     border: "1px solid #6366f1",
-    background:
-      "linear-gradient(135deg,#1e1b4b,#0f172a)",
-    boxShadow:
-      "0 0 20px rgba(99,102,241,0.2)",
+    background: "linear-gradient(135deg, #1e1b4b, #0f172a)",
+    boxShadow: "0 0 20px rgba(99,102,241,0.2)",
   },
-
+  flashUp: { animation: "flashUp 0.4s ease" },
+  flashDown: { animation: "flashDown 0.4s ease" },
   stockCardTicker: {
     fontSize: 11,
     fontWeight: 700,
     color: "#6366f1",
+    letterSpacing: 0.5,
   },
-
   stockCardName: {
     fontSize: 11,
     color: "#64748b",
     marginTop: 2,
     marginBottom: 6,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    maxWidth: 120,
   },
-
   stockCardPrice: {
     fontSize: 15,
     fontWeight: 700,
     color: "#f8fafc",
   },
-
   stockCardChange: {
     fontSize: 12,
     fontWeight: 600,
     marginTop: 2,
   },
-
   mainCard: {
     margin: "0 24px",
     background: "#0f172a",
@@ -714,65 +1093,503 @@ const styles = {
     borderRadius: 20,
     overflow: "hidden",
   },
-
   priceHero: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    padding: "20px 24px",
+    padding: "20px 24px 16px",
     borderBottom: "1px solid #1e293b",
-    background:
-      "linear-gradient(135deg,#0f172a,#131e35)",
+    background: "linear-gradient(135deg, #0f172a, #131e35)",
   },
-
   heroName: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: 700,
+    color: "#f8fafc",
   },
-
   heroMeta: {
     fontSize: 12,
     color: "#64748b",
     marginTop: 4,
   },
-
   heroPrice: {
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: 700,
+    letterSpacing: -1,
   },
-
   heroChange: {
     fontSize: 13,
     fontWeight: 600,
-    padding: "4px 10px",
+    padding: "3px 10px",
     borderRadius: 20,
     marginTop: 4,
     display: "inline-block",
   },
-
   metricRow: {
     display: "flex",
     overflowX: "auto",
+    borderBottom: "1px solid #1e293b",
     background: "#080d1a",
   },
-
   metricBox: {
-    minWidth: 120,
+    flexShrink: 0,
     padding: "12px 16px",
     borderRight: "1px solid #1e293b",
+    minWidth: 110,
   },
-
   metricLabel: {
     fontSize: 10,
     color: "#64748b",
-    marginBottom: 4,
     textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 4,
   },
-
   metricValue: {
     fontSize: 14,
     fontWeight: 600,
     color: "#e2e8f0",
   },
+  tabBar: {
+    display: "flex",
+    borderBottom: "1px solid #1e293b",
+    background: "#080d1a",
+  },
+  tabBtn: {
+    flex: 1,
+    background: "none",
+    border: "none",
+    color: "#64748b",
+    padding: "14px 8px",
+    cursor: "pointer",
+    fontSize: 13,
+    fontWeight: 600,
+    borderBottom: "2px solid transparent",
+    transition: "all 0.2s",
+    fontFamily: "inherit",
+  },
+  tabBtnActive: {
+    color: "#6366f1",
+    borderBottom: "2px solid #6366f1",
+    background: "rgba(99,102,241,0.05)",
+  },
+  section: {
+    padding: "20px 24px",
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: 700,
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginBottom: 16,
+    marginTop: 8,
+  },
+  grid2: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 12,
+    marginBottom: 20,
+  },
+  infoCard: {
+    background: "#080d1a",
+    border: "1px solid #1e293b",
+    borderRadius: 10,
+    padding: "12px 14px",
+  },
+  infoCardTitle: {
+    fontSize: 10,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  infoCardValue: {
+    fontSize: 15,
+    fontWeight: 700,
+    color: "#f8fafc",
+  },
+  rangeBox: {
+    background: "#080d1a",
+    border: "1px solid #1e293b",
+    borderRadius: 12,
+    padding: "16px",
+  },
+  rangeLabel: {
+    display: "flex",
+    justifyContent: "space-between",
+    fontSize: 12,
+    marginBottom: 10,
+  },
+  rangeTrack: {
+    height: 6,
+    background: "#1e293b",
+    borderRadius: 3,
+    position: "relative",
+  },
+  rangeFill: {
+    height: "100%",
+    background: "linear-gradient(90deg, #6366f1, #a78bfa)",
+    borderRadius: 3,
+    position: "absolute",
+    left: 0,
+    top: 0,
+  },
+  rangeDot: {
+    width: 14,
+    height: 14,
+    background: "#fff",
+    borderRadius: "50%",
+    position: "absolute",
+    top: -4,
+    transform: "translateX(-50%)",
+    border: "2px solid #6366f1",
+    boxShadow: "0 0 8px rgba(99,102,241,0.5)",
+  },
+  donutRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 24,
+    marginBottom: 24,
+  },
+  legend: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+  legendItem: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: "50%",
+    flexShrink: 0,
+  },
+  legendKey: {
+    fontSize: 13,
+    color: "#94a3b8",
+    flex: 1,
+  },
+  legendVal: {
+    fontSize: 13,
+    fontWeight: 700,
+    color: "#f8fafc",
+  },
+  trendTable: {
+    background: "#080d1a",
+    border: "1px solid #1e293b",
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  trendHeader: {
+    display: "grid",
+    gridTemplateColumns: "120px repeat(4, 1fr)",
+    borderBottom: "1px solid #1e293b",
+    padding: "8px 12px",
+  },
+  trendRow: {
+    display: "grid",
+    gridTemplateColumns: "120px repeat(4, 1fr)",
+    padding: "8px 12px",
+    borderBottom: "1px solid #0f172a",
+  },
+  trendCell: {
+    fontSize: 12,
+    color: "#64748b",
+    display: "flex",
+    alignItems: "center",
+  },
+  corpList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+  },
+  corpCard: {
+    background: "#080d1a",
+    border: "1px solid #1e293b",
+    borderRadius: 12,
+    padding: "14px 16px",
+    display: "flex",
+    alignItems: "center",
+    gap: 14,
+  },
+  corpBadge: {
+    padding: "8px 12px",
+    borderRadius: 10,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 4,
+    minWidth: 70,
+    textAlign: "center",
+  },
+  corpDetails: {
+    flex: 1,
+  },
+  ratingRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 10,
+  },
+  ratingLabel: {
+    width: 90,
+    fontSize: 12,
+    fontWeight: 600,
+    flexShrink: 0,
+  },
+  ratingTrack: {
+    flex: 1,
+    height: 8,
+    background: "#1e293b",
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  ratingFill: {
+    height: "100%",
+    borderRadius: 4,
+    transition: "width 0.6s ease",
+  },
+  ratingCount: {
+    width: 24,
+    textAlign: "right",
+    fontSize: 12,
+    color: "#94a3b8",
+    fontWeight: 600,
+  },
+  scoreGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 1fr",
+    gap: 12,
+    marginTop: 24,
+  },
+  scoreBox: {
+    background: "#080d1a",
+    border: "1px solid #1e293b",
+    borderRadius: 12,
+    padding: "14px 12px",
+    textAlign: "center",
+  },
+  scoreLabel: {
+    fontSize: 10,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 10,
+  },
+  scorePie: {
+    display: "flex",
+    justifyContent: "center",
+  },
+  targetPrice: {
+    fontSize: 22,
+    fontWeight: 700,
+    color: "#f8fafc",
+    marginTop: 8,
+  },
 
+  // ── Search Tab Styles ──
+  searchBox: {
+    display: "flex",
+    alignItems: "center",
+    background: "#080d1a",
+    border: "1px solid #334155",
+    borderRadius: 12,
+    padding: "10px 14px",
+    marginBottom: 16,
+    gap: 10,
+  },
+  searchIcon: {
+    fontSize: 16,
+    flexShrink: 0,
+  },
+  searchInput: {
+    flex: 1,
+    background: "none",
+    border: "none",
+    outline: "none",
+    color: "#f8fafc",
+    fontSize: 14,
+    fontFamily: "'Space Grotesk', 'Noto Sans Tamil', sans-serif",
+    fontWeight: 500,
+  },
+  searchClear: {
+    background: "none",
+    border: "none",
+    color: "#64748b",
+    cursor: "pointer",
+    fontSize: 13,
+    padding: "0 2px",
+    flexShrink: 0,
+  },
+  searchResultsList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    marginBottom: 16,
+  },
+  searchResultItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    background: "#080d1a",
+    border: "1px solid #1e293b",
+    borderRadius: 12,
+    padding: "12px 16px",
+    cursor: "pointer",
+    textAlign: "left",
+    width: "100%",
+    transition: "all 0.2s",
+  },
+  searchResultItemActive: {
+    border: "1px solid #6366f1",
+    background: "linear-gradient(135deg, #1e1b4b22, #080d1a)",
+    boxShadow: "0 0 12px rgba(99,102,241,0.15)",
+  },
+  searchResultLeft: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+  },
+  searchResultTicker: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: "#6366f1",
+    letterSpacing: 0.5,
+  },
+  searchResultName: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: "#f8fafc",
+  },
+  searchResultMeta: {
+    fontSize: 11,
+    color: "#64748b",
+  },
+  searchResultRight: {
+    textAlign: "right",
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+  },
+  searchResultPrice: {
+    fontSize: 15,
+    fontWeight: 700,
+    color: "#f8fafc",
+  },
+  searchResultChg: {
+    fontSize: 12,
+    fontWeight: 600,
+  },
+  searchResultCap: {
+    fontSize: 11,
+    color: "#64748b",
+  },
+  noResults: {
+    textAlign: "center",
+    padding: "32px 0",
+  },
+  searchDetailCard: {
+    background: "#080d1a",
+    border: "1px solid #1e293b",
+    borderRadius: 16,
+    padding: "18px 16px",
+    marginTop: 4,
+  },
+  searchDetailHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottom: "1px solid #1e293b",
+  },
+  searchDetailName: {
+    fontSize: 16,
+    fontWeight: 700,
+    color: "#f8fafc",
+  },
+  searchDetailMeta: {
+    fontSize: 11,
+    color: "#64748b",
+    marginTop: 4,
+  },
+  searchDetailPrice: {
+    fontSize: 22,
+    fontWeight: 700,
+    letterSpacing: -0.5,
+  },
+  searchDetailChgBadge: {
+    fontSize: 12,
+    fontWeight: 600,
+    padding: "3px 10px",
+    borderRadius: 20,
+    marginTop: 4,
+    display: "inline-block",
+  },
+  searchDetailGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    gap: 8,
+    marginBottom: 16,
+  },
+  searchDetailMetric: {
+    background: "#0f172a",
+    border: "1px solid #1e293b",
+    borderRadius: 8,
+    padding: "8px 10px",
+  },
+  searchDetailMetricLabel: {
+    fontSize: 9,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 3,
+  },
+  searchDetailMetricValue: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: "#e2e8f0",
+  },
+  searchScoreRow: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 1fr",
+    gap: 10,
+    paddingTop: 14,
+    borderTop: "1px solid #1e293b",
+  },
+  searchScoreItem: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+  },
+  searchScoreLabel: {
+    fontSize: 9,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  searchScoreBar: {
+    height: 6,
+    background: "#1e293b",
+    borderRadius: 3,
+    overflow: "hidden",
+    marginTop: 4,
+  },
+  searchScoreFill: {
+    height: "100%",
+    borderRadius: 3,
+    transition: "width 0.5s ease",
+  },
+  searchScoreVal: {
+    fontSize: 13,
+    fontWeight: 700,
+    color: "#f8fafc",
+  },
+  searchEmpty: {
+    textAlign: "center",
+    padding: "40px 0 20px",
+  },
 };
