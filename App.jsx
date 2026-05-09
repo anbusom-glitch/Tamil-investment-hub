@@ -1,3 +1,21 @@
+function App() {
+  return (
+    <div style={{ padding: '20px', fontFamily: 'Arial', textAlign: 'center' }}>
+      <h1>Tamil Invest Hub Pro</h1>
+      <p>பங்குச்சந்தை ஆய்வு தளம் - விரைவில் வரும்!</p>
+      <div style={{ border: '1px solid #ccc', padding: '10px', marginTop: '20px' }}>
+        <h3>முக்கிய விவரங்கள்:</h3>
+        <ul style={{ listStyle: 'none' }}>
+          <li>LTP: காத்திருங்கள்...</li>
+          <li>52-Week Range: ஆய்வு செய்யப்படுகிறது...</li>
+        </ul>
+      </div>
+    </div>
+  )
+}
+
+export default App
+
 import { useState, useEffect, useRef } from "react";
 
 const translations = {
